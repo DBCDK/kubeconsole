@@ -1,0 +1,1107 @@
+#!/bin/bash
+
+# Version
+VERSION=1.14.1
+
+# Set kubectl
+KCTL=kubectl
+
+# Configuration paths
+CONFIG=${HOME}/.kubeconsole
+mkdir -p $CONFIG
+
+# Check for configuration commands
+if [ $# -eq 1 ] && [[ "$1" == "-k" ]]; then
+  latest=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+  echo "Latest kubectl is: $latest"
+
+  client=$(kubectl version | grep Client\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
+  echo "Client is version: $client"
+
+  cluster=$(kubectl version | grep Server\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
+  echo "Cluster is running: $cluster"
+
+  if [ ! "$client" == "$cluster" ]; then
+    echo "To get get a new kubectl, execute 'kubeconsole -kk', then place it on the path"
+  fi
+  exit
+fi
+if [ $# -eq 1 ] && [[ "$1" == "-kk" ]]; then
+  cluster=$(kubectl version | grep Server\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
+  echo "Fetching kubectl version $cluster"
+  curl -sLO https://storage.googleapis.com/kubernetes-release/release/$cluster/bin/linux/amd64/kubectl
+  echo "Done. Move the new kubectl to a place on your path"
+  exit
+fi
+if [ $# -eq 1 ] && [[ "$1" == "-c" ]]; then
+  echo "Go to 'http://kube-login.default.svc.cloud.dbc.dk:5555/' to get a kubeconfig"
+  echo "Then create the directory '.kube' and add the configuration to the file 'config' there"
+  exit
+fi
+
+# Show version or help
+if [ $# -eq 1 ] && [ "$1" == "-v" ]; then
+  kubeconsole version
+  exit
+fi
+if [ $# -eq 1 ] && [ "$1" == "-?" -o "$1" == "-h" -o "$1" == "/?" -o "$1" == "/h" ]; then
+  kubeconsole help
+  exit
+fi
+
+# Namespaces directory
+NAMESPACES="${CONFIG}/namespaces"
+mkdir -p $CONFIG/namespaces
+
+# Setup bash profile - do this every time to avoid issues with rapidly added changes that
+# dont show up in the running console.
+#\[\033[1;33m\]\$
+RC="${CONFIG}/rc"
+echo "PS1=\"\[\033[01;37m\](K8S):\[\033[1;34m\]\w\[\033[0;33m\]/\\\${NAMESPACE}\[\033[0;93m\]\\\${FILTERNAME}\[\033[0;00m\]\$ \"" > ${RC}
+echo "PROMPT_COMMAND=\"export NAMESPACE=\\\$(cat $CONFIG/namespace); export FILTERNAME=\\\$(cat $CONFIG/filtername)\"" >> $RC
+echo "HISTFILE=\"$CONFIG/history\"" >>  $RC
+echo "PATH=\"$(dirname "$0"):$PATH\"" >> $RC
+
+# Setup command aliases
+echo "alias ns=\"kubeconsole namespace\"" >> $RC
+echo "alias json=\"kubeconsole json\"" >> $RC
+echo "alias yml=\"kubeconsole yml\"" >> $RC
+echo "alias yaml=\"kubeconsole yaml\"" >> $RC
+echo "alias pods=\"kubeconsole pods\"" >> $RC
+echo "alias p=\"kubeconsole pods\"" >> $RC
+echo "alias failed=\"kubeconsole failed\"" >> $RC
+echo "alias f=\"kubeconsole failed\"" >> $RC
+echo "alias completed=\"kubeconsole completed\"" >> $RC
+echo "alias c=\"kubeconsole completed\"" >> $RC
+echo "alias deployments=\"kubeconsole deployments\"" >> $RC
+echo "alias d=\"kubeconsole deployments\"" >> $RC
+echo "alias wp=\"kubeconsole watchpods\"" >> $RC
+echo "alias try=\"kubeconsole try_apply_deployment\"" >> $RC
+echo "alias apply=\"kubeconsole apply_deployment\"" >> $RC
+echo "alias delete=\"kubeconsole delete_deployment\"" >> $RC
+echo "alias namespaces=\"kubeconsole namespaces\"" >> $RC
+echo "alias log=\"kubeconsole log\"" >> $RC
+echo "alias l=\"kubeconsole log\"" >> $RC
+echo "alias logf=\"kubeconsole logf\"" >> $RC
+echo "alias logc=\"kubeconsole logc\"" >> $RC
+echo "alias lf=\"kubeconsole logf\"" >> $RC
+echo "alias logp=\"kubeconsole logp\"" >> $RC
+echo "alias lp=\"kubeconsole logp\"" >> $RC
+echo "alias shell=\"kubeconsole shell\"" >> $RC
+echo "alias s=\"kubeconsole shell\"" >> $RC
+echo "alias ?=\"kubeconsole help\"" >> $RC
+echo "alias help=\"kubeconsole help\"" >> $RC
+echo "alias restart=\"kubeconsole restart\"" >> $RC
+echo "alias policies=\"kubeconsole show_policies\"" >> $RC
+echo "alias k=\"kubeconsole kubectl\"" >> $RC
+echo "alias show=\"kubeconsole show\"" >> $RC
+echo "alias get=\"kubeconsole get\"" >> $RC
+echo "alias env=\"kubeconsole env\"" >> $RC
+echo "alias img=\"kubeconsole img\"" >> $RC
+echo "alias scale=\"kubeconsole scale_deployment\"" >> $RC
+echo "alias foo=\"kubeconsole foo\"" >> $RC
+echo "alias filter=\"kubeconsole filter\"" >> $RC
+echo "alias since=\"kubeconsole since\"" >> $RC
+echo "alias query=\"kubeconsole query\"" >> $RC
+echo "alias clip=\"cat $CONFIG/last | xclip\"" >> $RC
+echo "alias cpy=\"kubeconsole cpy\"" >> $RC
+
+# Setup pod name completion
+set_autocomplete () {
+  $KCTL get pods -n $(cat $CONFIG/namespace) | cut -d ' ' -f 1 > $CONFIG/podlist
+  $KCTL get deployments -n $(cat $CONFIG/namespace) | cut -d ' ' -f 1 > $CONFIG/deploymentlist
+  echo "#/usr/bin/env bash
+  _kubeconsole_pod_completions()
+  {
+    pods=
+    while read pod; do
+      pods+=\$pod' '
+    done < $CONFIG/podlist
+   COMPREPLY=(\$(compgen -W '\${pods}' \${COMP_WORDS[\${COMP_CWORD}]}))
+  }
+
+  _kubeconsole_deployment_completions()
+  {
+    deployments=
+    while read deployment; do
+      deployments+=\$deployment' '
+    done < $CONFIG/deploymentlist
+   COMPREPLY=(\$(compgen -W '\${deployments}' \${COMP_WORDS[\${COMP_CWORD}]}))
+  }
+  complete -F _kubeconsole_pod_completions get
+  complete -F _kubeconsole_pod_completions show
+  complete -F _kubeconsole_pod_completions env
+  complete -F _kubeconsole_pod_completions log
+  complete -F _kubeconsole_pod_completions l
+  complete -F _kubeconsole_pod_completions logf
+  complete -F _kubeconsole_pod_completions lf
+  complete -F _kubeconsole_pod_completions logp
+  complete -F _kubeconsole_pod_completions lp
+  complete -F _kubeconsole_pod_completions shell
+  complete -F _kubeconsole_pod_completions s
+  complete -F _kubeconsole_pod_completions restart
+  complete -F _kubeconsole_pod_completions cpy
+  complete -F _kubeconsole_deployment_completions scale
+  complete -F _kubeconsole_deployment_completions delete
+  " > $CONFIG/complete
+}
+echo ". ${CONFIG}/complete" >> $RC
+
+# If no namespace has been set, then set the users default namespace
+if [ ! -f "${CONFIG}/namespace" ]; then
+  echo "user-${USER}" > ${CONFIG}/namespace;
+fi
+
+# If no output format has been set, then set to json
+if [ ! -f "${CONFIG}/outputformat" ]; then
+  echo "json" > ${CONFIG}/outputformat;
+fi
+
+# If no default since time exists, set to 1 hour
+if [ ! -f "${CONFIG}/since" ]; then
+  echo "1h" > ${CONFIG}/since;
+fi
+
+# Check for a pods-filter
+if [ ! -f "${CONFIG}/filter" ]; then
+  touch ${CONFIG}/filter;
+  touch ${CONFIG}/filtername;
+  FILTER=
+else
+  FILTER=$(cat $CONFIG/filter)
+fi
+
+# Run kubectl
+REDIRECT=
+APPEND=
+NOLOG=
+runkctl () {
+  if [ "$REDIRECT" != "" ]; then
+    if [ ! -f "$CONFIG/no-header" ]; then
+      cmd="$KCTL $@"
+      echo -e "\033[0;90m$cmd\033[0;00m"
+    fi
+    $KCTL $@ -n $NAMESPACE > "${REDIRECT}"
+  elif [ "$APPEND" != "" ]; then
+    if [ ! -f "$CONFIG/no-header" ]; then
+      cmd="$KCTL $@"
+      echo -e "\033[0;90m$cmd\033[0;00m"
+    fi
+    $KCTL $@ -n $NAMESPACE >> "${APPEND}"
+  else
+    if [ ! -f "$CONFIG/no-header" ]; then
+      cmd="$KCTL $@"
+      echo -e "\033[0;90m$cmd\033[0;00m"
+    fi
+    if [ "$NOLOG" == "" ]; then
+      $KCTL $@ -n $NAMESPACE > $CONFIG/last
+      cat $CONFIG/last
+    else
+      $KCTL $@ -n $NAMESPACE
+    fi
+  fi
+
+  REDIRECT=
+  APPEND=
+  NOLOG=
+}
+
+# Print usage message and exit
+usage () {
+  echo -e "\033[0;31mUsage:\n\033[0;33m$1"
+  exit
+}
+
+# Print error and exit
+error () {
+  echo -e "\033[0;31m$1"
+  exit
+}
+
+# Print error and exit
+confirm () {
+  echo -e -n "\033[0;\e[93m$1\033[0;00m"
+}
+
+ARG=
+expand_arg () {
+  ARG=$1
+
+  if [ $# -eq 1 ]; then
+    list="$CONFIG/pids"
+  elif [ $# -eq 2 ]; then
+    list="$CONFIG/$2"
+  else
+    error "Wrong number of parameters for expand_arg()"
+  fi
+
+  if [ ! -f $list ]; then
+    if [[ $1 =~ ^[0-9]+$ ]]; then
+      error "Unknown variable $1"
+    fi
+    ARG=$1
+    return
+  fi
+
+  while read var; do
+    varname=$(echo $var | cut -d '=' -f 1)
+    if [[ "$varname" == "$1" ]]; then
+      ARG=$(echo $var | cut -d '=' -f 2)
+      break
+    fi
+  done < $list
+}
+
+YML=
+get_yml_file() {
+  ls *.yml > $CONFIG/tmp
+  if [ $(wc -l $CONFIG/tmp | cut -d ' ' -f 1) -eq 1 ]; then
+    YML=$(cat $CONFIG/tmp)
+  else
+    error "More than one yml file in this directory"
+  fi
+}
+
+DEPLOYMENT=
+get_deployment_name() {
+  # This will not work for yml files that do not match the service name
+  DEPLOYMENT=$(echo $YML | cut -d '.' -f 1)
+}
+get_deployment_name_from_pod_name() {
+  # This will not work for yml files that do not match the service name
+  DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 3- | rev)
+}
+
+start_shell() {
+  /bin/bash --noprofile --rcfile $RC
+  exit
+}
+
+# If no parameters is given, start the interactive k8s shell
+if [ $# -eq 0 ]; then
+  rm -f $CONFIG/pids
+  clear
+  start_shell
+fi
+
+# If a startup command was given, execute it
+if [ $# -eq 2 ] && [[ "$1" == "-c" ]]; then
+  NAMESPACE=$(cat $CONFIG/namespace)
+  IS_START_COMMAND=1
+  echo "1" > $CONFIG/no-header
+  shift
+  clear
+fi
+
+DRYRUN=
+
+### COMMANDS ###
+
+case "$1" in
+
+      # Set namespace
+      "namespace")
+        if [ $# -lt 2 ]; then
+          usage "  ns 'xyz': change to namespace 'xyz'\n  ns 'xyz' 'staging': change to namespace 'xyz' and add abbreviation 'staging'\n  ns '.': change to namespace 'user-${USER}'"
+        fi
+
+        if [ "$2" = "." ]; then
+           echo "user-${USER}" > ${CONFIG}/namespace;
+        else
+          ns=$2
+          if [ $# -gt 2 ]; then
+            echo -n $2 > ${NAMESPACES}/$3
+          else
+            if [ -n "$(ls -A $NAMESPACES)" ]; then
+              for abbr in $NAMESPACES/*; do
+                if [ $(basename $abbr) = "$2" ]; then
+                  ns=$(cat $abbr)
+                  break
+                fi
+              done
+            fi
+          fi
+
+	  # Check that this namespace does exist
+	  $KCTL get namespace $ns >>/dev/null 2>&1
+	  if [ ! $? -eq 0 ]; then
+            error "No such namespace \'$ns\'"
+	  fi
+
+          echo $ns > ${CONFIG}/namespace
+          NAMESPACE=$ns
+
+	  # Show pods
+          kubeconsole pods
+        fi
+        ;;
+
+      # Set output format for get/show
+      "json")
+        echo "json" > ${CONFIG}/outputformat
+        ;;
+      "yaml")
+        ;&
+      "yml")
+        echo "yaml" > ${CONFIG}/outputformat
+        ;;
+
+      # List abbreviated namespaces
+      "namespaces")
+        if [ $# -ne 1 ] && [ $# -ne 3 ]; then
+          usage "  namespaces: List abbreviated namespaces"
+        fi
+
+        if [ $# -eq 3 ] && [ "$2" == "delete" ]; then
+          if [ -f $NAMESPACES/$3 ]; then
+            echo "Deleting namespace abbrevition '$3'"
+            rm $NAMESPACES/$3
+          else
+            error "No such abbreviated namespace '$3'"
+          fi
+        else
+          if [ -n "$(ls -A $NAMESPACES)" ]; then
+            for abbr in $NAMESPACES/*; do
+              ns=$(cat $abbr)
+              echo $(basename $abbr)" ==> "$(cat $abbr)
+            done
+          else
+            echo "(none)"
+          fi
+        fi
+        ;;
+
+      # Watch pods
+      "watchpods")
+	echo "1" > $CONFIG/no-header
+        watch -n 1 kubeconsole pods
+        rm -f $CONFIG/no-header
+        ;;
+
+      # List pods
+      "completed")
+        ;&
+
+      "failed")
+        ;&
+
+      "deployments")
+        ;&
+
+      "pods")
+        if [ $# -lt 1 ]; then
+          usage "  pods|failed|completed|deployments [filter|no-header]: get running|failed|completed|deployments pods"
+        fi
+
+        if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
+          pattern=$2
+        else
+          if [ "$FILTER" != "" ]; then
+            pattern=$FILTER
+          else
+            pattern=
+          fi
+        fi
+
+        if [ "$1" == "deployments" ]; then
+          REDIRECT=$CONFIG/tmp.1; runkctl get deployments -n $NAMESPACE
+            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        else
+          REDIRECT=$CONFIG/tmp.1; runkctl get pods -n $NAMESPACE
+
+          if [ "$1" == "failed" ]; then
+            cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -E '^\S+ +[0-9]+/[0-9]+ +Running +[1-9][0-9]*' > $CONFIG/tmp
+          elif [ "$1" == "completed" ]; then
+            cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -E '^\S+ +[0-9]+/[0-9]+ +Completed +[0-9][0-9]*' > $CONFIG/tmp
+          else
+            cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -Ev '^\S+ +[0-9]+/[0-9]+ +Completed +[0-9][0-9]*' > $CONFIG/tmp
+          fi
+          rm $CONFIG/tmp.1
+        fi
+
+        cnt=1
+        rm -f $CONFIG/pids
+        {
+          if [ $# -eq 1 ] && [ "$FILTER" == "" ]; then
+            read
+          fi
+          while read fn; do
+            if [ $cnt -lt 100 ]; then
+              echo -n " "
+            fi
+            if [ $cnt -lt 10 ]; then
+              echo -n " "
+            fi
+            echo "${cnt} = $fn"
+            podname=$(echo $fn | cut -d ' ' -f 1)
+            echo "${cnt}=$podname" >>  $CONFIG/pids
+            cnt=$((cnt+1))
+          done
+        } < $CONFIG/tmp
+        rm $CONFIG/tmp
+
+        set_autocomplete
+        ;;
+
+      # Show network policies
+      "show_policies")
+        if [ $# -ne 1 ]; then
+          usage "  pods: get network policies"
+        fi
+
+        REDIRECT=$CONFIG/tmp; runkctl get networkpolicies -n $NAMESPACE
+        cnt=1
+        rm -f $CONFIG/poids
+        {
+          read
+          while read fn; do
+            echo "${cnt} = $fn"
+            podname=$(echo $fn | cut -d ' ' -f 1)
+            echo "${cnt}=$podname" >>  $CONFIG/poids
+            cnt=$((cnt+1))
+          done
+        } < $CONFIG/tmp
+        rm $CONFIG/tmp
+        ;;
+
+      # Apply dryrun
+      "try_apply_deployment")
+        DRYRUN="--dry-run -o $(cat $CONFIG/outputformat)"
+        ;&
+
+      # Deploy yaml file
+      "apply_deployment")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          yaml=$YML
+        elif [ $# -ne 2 ]; then
+          usage "  apply 'yaml file': apply this yaml file\n  apply '.': apply last applied yaml file again"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_apply ]; then
+               error "You have never applied any yaml files"
+             fi
+             yaml=$(cat $CONFIG/last_apply)
+          else
+            yaml=$2
+          fi
+        fi
+
+        runkctl apply -f $yaml -n $NAMESPACE $DRYRUN
+        echo $yaml > $CONFIG/last_apply
+        ;;
+
+      # Delete deployment
+      "delete_deployment")
+        ;&
+
+      # Delete deployment, confirmed
+      "delete_deployment_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  delete: delete deployment from local yml file\n  delete 'deployment name': delete this deployment\n  delete '.': delete last deleted deployment"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_delete_deployment ]; then
+               error "You have never deleted any deployments"
+             fi
+             deployment=$(cat $CONFIG/last_delete_deployment)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "delete_deployment_confirmed" ]; then
+          runkctl delete deployment $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_delete_deployment
+        else
+	  confirm "Are you sure? delete deployment $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole delete_deployment_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Show only environment settings for a pod
+      "env")
+        if [ $# -ne 2 ]; then
+          usage "  env: Show environment variables\n  show '.': Show environment variables for last pod again"
+        fi
+
+        pod=$2
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_env ]; then
+            error "You have never show environment variables from any pods"
+          fi
+          pod=$(cat $CONFIG/last_env)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/envout
+        runkctl get pod $pod -n $NAMESPACE -o json 
+        cat $CONFIG/envout | jq -r '.spec.containers | to_entries[].value.env[] | .name + " = " + .value'
+	rm $CONFIG/envout
+
+        echo $pod > $CONFIG/last_env
+        ;;
+
+      # Show only the image used by a pod
+      "img")
+        if [ $# -ne 2 ]; then
+          usage "  img: Show pod image\n  show '.': Show image for last pod again"
+        fi
+
+        pod=$2
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_img ]; then
+            error "You have never show image from any pods"
+          fi
+          pod=$(cat $CONFIG/last_img)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/imgout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        cat $CONFIG/imgout | jq -r '.spec.containers | to_entries[].value.image'
+	rm $CONFIG/imgout
+
+        echo $pod > $CONFIG/last_img
+        ;;
+
+      # Get or Describe...
+      "get")
+        ;&
+
+      "show")
+        if [ $# -ne 3 ]; then
+          if [ $# -eq 2 ]; then
+            type="pod"
+            target=$2
+          else
+            usage "  show pod|deployment|policy: describe resource\n  show '.': describe last described resource"
+          fi
+        else
+          type=$2
+          target=$3
+        fi
+
+        case "$type" in
+
+          "pod")
+            pod=$target
+            if [[ "$target" == "." ]]; then
+               if ! [ -f $CONFIG/last_describe_pod ]; then
+                 error "You have never described any pods"
+               fi
+               pod=$(cat $CONFIG/last_describe_pod)
+            fi
+
+            # Attempt expansion
+            expand_arg $pod
+            pod=$ARG
+
+            case "$1" in
+              "get")
+                runkctl get pod $pod -n $NAMESPACE -o $(cat $CONFIG/outputformat)
+                ;;
+              "show")
+                runkctl describe pod $pod -n $NAMESPACE
+                ;;
+            esac
+
+            echo $pod > $CONFIG/last_describe_pod
+            ;;
+
+          "deploy")
+            ;&
+
+          "deployment")
+
+            deployment=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_deployment ]; then
+                error "You have never described any deployments"
+              fi
+              deployment=$(cat $CONFIG/last_describe_deployment)
+            fi
+
+            # Attempt expansion
+            expand_arg $deployment
+            if [ "$deployment" != "$ARG" ]; then
+              deployment=$ARG
+              deployment=$(echo $deployment | rev | cut -d '-' -f 3- | rev)
+            fi
+
+            # Possibly input value pod name
+            if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+              get_deployment_name_from_pod_name $deployment
+              deployment=$DEPLOYMENT
+            fi
+
+            case "$1" in
+              "get")
+                runkctl get deployment $deployment -n $NAMESPACE -o $(cat $CONFIG/outputformat)
+                ;;
+              "show")
+                runkctl describe deployment $deployment -n $NAMESPACE
+                ;;
+            esac
+
+            echo $deployment > $CONFIG/last_describe_deployment
+            ;;
+
+          "policy")
+
+            policy=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_policy ]; then
+                error "You have never described any policies"
+              fi
+              deployment=$(cat $CONFIG/last_describe_policy)
+            fi
+
+            # Attempt expansion
+            expand_arg $policy poids
+            policy=$ARG
+
+            case "$1" in
+              "get")
+                runkctl get networkpolicy $policy -n $NAMESPACE -o $(cat $CONFIG/outputformat)
+                ;;
+              "show")
+                runkctl describe networkpolicy $policy -n $NAMESPACE
+                ;;
+            esac
+
+            echo $deployment > $CONFIG/last_describe_policy
+            ;;
+
+          *)
+            error "Unknown resource type '$2'"
+            ;;
+
+        esac
+        ;;
+
+      # Get log from pod
+      "logc")
+
+        if [ $# -ne 2 ]; then
+          usage "  logc 'pod id' [-f]: get complete log from this pod\n  log '.' [-f]: get complete log from same pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_logc ]; then
+             error "You have never fetched any logs"
+           fi
+           pod=$(cat $CONFIG/last_logc)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	# Get since time
+	since=$(cat $CONFIG/since)
+
+        runkctl logs $pod -n $NAMESPACE
+	cat $CONFIG/last
+        echo $pod > $CONFIG/last_logc
+        ;;
+
+      "log")
+
+        if [ $# -ne 2 ]; then
+          usage "  log 'pod id' [-f]: get log from this pod\n  log '.' [-f]: get log from same pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_log ]; then
+             error "You have never fetched any logs"
+           fi
+           pod=$(cat $CONFIG/last_log)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	# Get since time
+	since=$(cat $CONFIG/since)
+
+        runkctl logs $pod --since=$since -n $NAMESPACE
+	cat $CONFIG/last
+        echo $pod > $CONFIG/last_log
+        ;;
+
+      # Get log from pod, streaming
+      "logf")
+
+        if [ $# -ne 2 ]; then
+          usage "  logf 'pod id': get log tail from this pod\n  log '.': get log tail from same pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_logf ]; then
+             error "You have never streamed any logs"
+           fi
+           pod=$(cat $CONFIG/last_logf)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+        runkctl logs $pod --since=1s -n $NAMESPACE -f
+	cat $CONFIG/last
+        echo $pod > $CONFIG/last_logf
+        ;;
+
+      # Get previous log from pod
+      "logp")
+
+        if [ $# -ne 2 ]; then
+          usage "  logp 'pod id': get previous log from this pod\n  log '.': get previous log from same pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_logp ]; then
+             error "You have never fetched any previous logs"
+           fi
+           pod=$(cat $CONFIG/last_logp)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+        runkctl logs $pod -n $NAMESPACE --previous
+	cat $CONFIG/last
+        echo $pod > $CONFIG/last_logp
+        ;;
+
+      # Enter pod
+      "shell")
+        if [ $# -ne 2 ]; then
+          usage "  shell 'pod id': enter this pod and run bash\n  shell '.': enter same pod again and run bash"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_shell ]; then
+             error "You have never entered any containers"
+           fi
+           pod=$(cat $CONFIG/last_shell)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	NOLOG=1
+        runkctl exec -it $pod -n $NAMESPACE "/bin/bash"
+        echo $pod > $CONFIG/last_shell
+        ;;
+
+      # Restart pod
+      "restart")
+        ;&
+
+      # Restart pod, confirmed
+      "restart_confirmed")
+        if [ $# -ne 2 ]; then
+          usage "  restart 'pod id': restart this pod\n  shell '.': restart the same pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_restart ]; then
+             error "You have never restarted any pods"
+           fi
+           pod=$(cat $CONFIG/last_restart)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	if [ "$1" == "restart_confirmed" ]; then
+          runkctl delete pod $pod -n $NAMESPACE
+          echo $pod > $CONFIG/last_restart
+        else
+	  confirm "Are you sure? restart pod $pod [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole restart_confirmed $pod
+          else
+            error "ok.. won't do that then :/"
+          fi
+        fi
+
+        ;;
+
+      # Run kubectl
+      "kubectl")
+
+       if [ $# -lt 2 ]; then
+         error "No arguments for kubectl"
+       fi
+
+       args=
+       for i in "${@:2}"; do
+         args="$args $i"
+       done
+
+       runkctl $args -n $NAMESPACE
+       ;;
+
+      # Scale deployment
+      "scale_deployment")
+        ;&
+
+      # Scale deployment, confirmed
+      "scale_deployment_confirmed")
+
+        if [ $# -ne 3 ]; then
+          usage "  scale #replicas: scale deployment from local yml file\n  scale 'deployment name' #replicas: scale this deployment\n  scale '.' #replicas: scale last scaled deployment"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_scale_deployment ]; then
+               error "You have never scaled any deployments"
+             fi
+             deployment=$(cat $CONFIG/last_scale_deployment)
+          else
+            deployment=$2
+          fi
+          replicas=$3
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+          deployment=$(echo $deployment | rev | cut -d '-' -f 3- | rev)
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "scale_deployment_confirmed" ]; then
+          runkctl scale deployment --replicas $replicas $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_scale_deployment
+        else
+	  confirm "Are you sure? scale deployment $deployment to $replicas replicas [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole scale_deployment_confirmed $deployment $replicas
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      "filter")
+
+        if [ $# -eq 1 ]; then
+          truncate -s 0 $CONFIG/filter
+          truncate -s 0 $CONFIG/filtername
+        else
+          echo "$2" > $CONFIG/filter
+          echo "/$2" > $CONFIG/filtername
+        fi
+
+        ;;
+
+      "since")
+
+        if [ $# -eq 1 ]; then
+          echo "1h" > $CONFIG/since
+        else
+          echo "$2" > $CONFIG/since
+        fi
+
+        ;;
+
+      # Try to find a string in the logs from all currently selected pods
+      "query")
+
+        if [ $# -ne 2 ]; then
+          usage "  query text: Search for this text in the logs of all pods selected by the current filter\n  query '.' [-f]: Repeat search"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_logc ]; then
+             error "You have never queried any pods"
+           fi
+           pod=$(cat $CONFIG/last_query)
+        fi
+
+	# Check for a filter
+	if [ -z "$FILTER" ]; then
+	  error "No filter set, query scope is too big"
+	fi
+
+        # Update the list of pods
+	kubeconsole pods > /dev/null
+
+	while read pid; do
+	  pod=$(echo $pid | cut -d '=' -f 2)
+	  echo "===[ $pod ] =============="
+          runkctl logs $pod -n $NAMESPACE | grep $2
+	done < "$CONFIG/pids"
+
+        echo $pod > $CONFIG/last_query
+        ;;
+
+      # Copy a file to/from a pod
+      "cpy")
+
+        if [ $# -eq 2 ] && [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_copy_src ] || ! [ -f $CONFIG/last_copy_dest ]; then
+             error "You have never copied any files"
+           fi
+           src=$(cat $CONFIG/last_copy_src)
+           dest=$(cat $CONFIG/last_copy_dest)
+        elif [ $# -ne 3 ]; then
+          usage "  copy src pod:dest | copy pod:dest src: Copy file from src to dest or reverse\n  copy '.': Repeat copy"
+        else
+          src=$2
+          dest=$3
+        fi
+
+        # Determine local and remote
+        if [[ $src == *":"* ]]; then
+          pod=$(echo $src | cut -d ':' -f 1)
+          expand_arg $pod
+          pod=$ARG
+
+          remote=$(echo $src | cut -d ':' -f 2)
+          a="$NAMESPACE/$pod:$remote"
+          b=$dest
+        else
+          pod=$(echo $dest | cut -d ':' -f 1)
+          expand_arg $pod
+          pod=$ARG
+
+          remote=$(echo $dest | cut -d ':' -f 2)
+          a=$src
+          b="$NAMESPACE/$pod:$remote"
+        fi
+
+        runkctl cp $a $b
+        echo $src > $CONFIG/last_copy_src
+        echo $dest > $CONFIG/last_copy_dest
+        ;;
+
+      "help")
+
+        echo "Available kubeconsole helper commands. "        echo "Most commands will output usage help if run without parameters."
+
+        echo ""
+        echo "Options:"
+        echo "  kubeconsole -v       Show version and exit"
+        echo "  kubeconsole -c       Fetch new kubeconfig"
+        echo "  kubeconsole -k       Fetch new kubectl"
+        echo "  kubeconsole -?       Show this help"
+        echo "  kubeconsole /?       ...............Microsoft style"
+        echo "  kubeconsole help     ...............with command"
+        echo ""
+        echo "Commands:"
+        echo "  ns ...               Change namespace"
+        echo "  namespaces           List abbreviated namespaces"
+        echo ""
+        echo "  pods                 Show pods in namespace (alias 'p')"
+        echo "  completed            Show pods with status 'Completed' (alias 'c')"
+        echo "  failed               Show pods with restarts (alias 'f')"
+        echo "  wp                   Show pods in namespace using 'watch -n 1'"
+        echo "                       If found, then variables [1-N] is available for pod related commands"
+        echo "  policies             Show network policies"
+        echo "  deployments          Show deployments (alias 'd')"
+        echo ""
+        echo "  filter [...]         Filter the 'pods|completed|failed|deployments' list. No argument clears the filter"
+        echo ""
+        echo "  apply ...            Apply deployment from a yaml file"
+        echo "  delete ...           Delete deployment"
+        echo "  scale ...            Scale deployment"
+        echo ""
+        echo "  json                 Set output format for the get command to JSON"
+        echo "  yml                  Set output format for the get command to YAML"
+        echo ""
+        echo "  show ... ...         Show (describe) resource (variables expansion applies)"
+        echo "       pod ...         Describe a pod"
+        echo "       deployment ...  Describe a deployment"
+        echo "       policy ...      Describe a network policy"
+        echo ""
+        echo "  get ... ...          Get resource specs (variable expansion applies)"
+        echo "       pod ...         Get pod spec."
+        echo "       deployment ...  Get deployment spec."
+        echo "       policy ...      Get network spec."
+        echo "  env ...              Get environment variables from pod"
+        echo "  img ...              Get image name from pod"
+        echo ""
+        echo "  log ...              Get the log from a pod (alias 'l')"
+        echo "  logf ...             Stream the log from a pod (alias 'lf')"
+        echo "  logc ...             Get the complete log from a pod"
+        echo "  logp ...             Get the previous log from a pod"
+	echo "  query ...            Search the complete logs from all pods selected by the current filter"
+        echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
+	echo ""
+        echo "  shell ...            Enter pod and execute the shell"
+        echo "  restart ...          Delete a pod (which will then restart)"
+        echo ""
+        echo "  cpy ... ...          Copy a file to/from a pod"
+        echo ""
+        echo "  k ...                Run kubectl commands (do not add namespace)"
+        echo ""
+        echo "? or help              Show this help"
+        ;;
+
+        "version")
+
+          echo "kubeconsole v$VERSION"
+          ;;
+
+      *)
+        echo -e "What?? \033[0;31m\"$1\""
+        ;;
+esac
+
+# If a startup command was requested, start the interactive shell
+if [ ! -z $IS_START_COMMAND ]; then
+  rm -f $CONFIG/no-header
+  start_shell
+fi
