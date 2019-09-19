@@ -98,6 +98,8 @@ echo "alias show=\"kubeconsole show\"" >> $RC
 echo "alias get=\"kubeconsole get\"" >> $RC
 echo "alias env=\"kubeconsole env\"" >> $RC
 echo "alias img=\"kubeconsole img\"" >> $RC
+echo "alias container=\"kubeconsole container\"" >> $RC
+echo "alias cnt=\"kubeconsole container\"" >> $RC
 echo "alias scale=\"kubeconsole scale_deployment\"" >> $RC
 echo "alias foo=\"kubeconsole foo\"" >> $RC
 echo "alias filter=\"kubeconsole filter\"" >> $RC
@@ -105,6 +107,7 @@ echo "alias since=\"kubeconsole since\"" >> $RC
 echo "alias query=\"kubeconsole query\"" >> $RC
 echo "alias clip=\"cat $CONFIG/last | xclip\"" >> $RC
 echo "alias cpy=\"kubeconsole cpy\"" >> $RC
+echo "alias containers=\"kubeconsole show_containers\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -388,6 +391,7 @@ case "$1" in
       "deployments")
         ;&
 
+
       "pods")
         if [ $# -lt 1 ]; then
           usage "  pods|failed|completed|deployments [filter|no-header]: get running|failed|completed|deployments pods"
@@ -462,6 +466,15 @@ case "$1" in
           done
         } < $CONFIG/tmp
         rm $CONFIG/tmp
+        ;;
+
+      # Show containers and their pods
+      "show_containers")
+        if [ $# -ne 1 ]; then
+          usage "  show_containers: get a list of containers and pods running on them"
+        fi
+
+        kubectl get pods -o=jsonpath='{range .items[*]}{.spec.nodeName}{"\t"}{.status.containerStatuses[].ready}{"\t"}{.status.containerStatuses[].restartCount}{"\t"}{.metadata.name}{"\n"}{end}' --sort-by='.spec.nodeName' -n $NAMESPACE
         ;;
 
       # Apply dryrun
@@ -592,6 +605,32 @@ case "$1" in
 	rm $CONFIG/imgout
 
         echo $pod > $CONFIG/last_img
+        ;;
+
+      # Show container for a pod
+      "container")
+        if [ $# -ne 2 ]; then
+          usage "  container: Show pod container\n  show '.': Show container for last pod again"
+        fi
+
+        pod=$2
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_container ]; then
+            error "You have never shown container from any pods"
+          fi
+          pod=$(cat $CONFIG/last_container)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/containerout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        cat $CONFIG/containerout | jq -r '.spec.nodeName'
+	rm $CONFIG/containerout
+
+        echo $pod > $CONFIG/last_container
         ;;
 
       # Get or Describe...
