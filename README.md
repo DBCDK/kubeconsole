@@ -4,7 +4,9 @@ Lowkey shell overlay for making life with kubectl a bit more bearable
 It requires normal bash, jq and (need I say it?) kubectl with a 'config'
 in '~/.kube'.
 
-No documentation, but you may find the command "help" usefull ;)
+To get started: run 'kubeconsole -c' to get help on getting a kubeconfig.
+
+No further documentation, but you may find the command "help" or 'kubeconsole -h' usefull ;)
 
 ---
 
