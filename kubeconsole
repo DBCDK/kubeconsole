@@ -983,6 +983,9 @@ case "$1" in
           echo "/$2" > $CONFIG/filtername
         fi
 
+        # Show pods
+        kubeconsole pods
+
         ;;
 
       "since")
