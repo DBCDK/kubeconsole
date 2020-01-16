@@ -148,11 +148,18 @@ set_autocomplete () {
   complete -F _kubeconsole_deployment_completions delete
   " > $CONFIG/complete
 }
-echo ". ${CONFIG}/complete" >> $RC
+if [ -f "${CONFIG}/complete" ]; then
+  ". ${CONFIG}/complete" >> $RC
+fi
 
 # If no namespace has been set, then set the users default namespace
 if [ ! -f "${CONFIG}/namespace" ]; then
-  echo "user-${USER}" > ${CONFIG}/namespace;
+  kubectl get namespace user-${USER} > /dev/null 2>&1
+  if [ $? -eq 0 ]; then
+    echo "user-${USER}" > ${CONFIG}/namespace;
+  else
+    echo "default" > ${CONFIG}/namespace;
+  fi
 fi
 
 # If no output format has been set, then set to json
