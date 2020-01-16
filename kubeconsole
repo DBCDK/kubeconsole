@@ -149,7 +149,7 @@ set_autocomplete () {
   " > $CONFIG/complete
 }
 if [ -f "${CONFIG}/complete" ]; then
-  ". ${CONFIG}/complete" >> $RC
+  echo ". ${CONFIG}/complete" >> $RC
 fi
 
 # If no namespace has been set, then set the users default namespace
