@@ -75,6 +75,8 @@ echo "alias completed=\"kubeconsole completed\"" >> $RC
 echo "alias c=\"kubeconsole completed\"" >> $RC
 echo "alias deployments=\"kubeconsole deployments\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
+echo "alias services=\"kubeconsole services\"" >> $RC
+echo "alias sv=\"kubeconsole services\"" >> $RC
 echo "alias wp=\"kubeconsole watchpods\"" >> $RC
 echo "alias try=\"kubeconsole try_apply_deployment\"" >> $RC
 echo "alias apply=\"kubeconsole apply_deployment\"" >> $RC
@@ -96,6 +98,8 @@ echo "alias policies=\"kubeconsole show_policies\"" >> $RC
 echo "alias k=\"kubeconsole kubectl\"" >> $RC
 echo "alias show=\"kubeconsole show\"" >> $RC
 echo "alias get=\"kubeconsole get\"" >> $RC
+echo "alias gets=\"kubeconsole get service\"" >> $RC
+echo "alias shows=\"kubeconsole show service\"" >> $RC
 echo "alias env=\"kubeconsole env\"" >> $RC
 echo "alias img=\"kubeconsole img\"" >> $RC
 echo "alias container=\"kubeconsole container\"" >> $RC
@@ -278,7 +282,6 @@ get_deployment_name() {
   DEPLOYMENT=$(echo $YML | cut -d '.' -f 1)
 }
 get_deployment_name_from_pod_name() {
-  # This will not work for yml files that do not match the service name
   DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 3- | rev)
 }
 
@@ -398,10 +401,12 @@ case "$1" in
       "deployments")
         ;&
 
+      "services")
+        ;&
 
       "pods")
         if [ $# -lt 1 ]; then
-          usage "  pods|failed|completed|deployments [filter|no-header]: get running|failed|completed|deployments pods"
+          usage "  pods|failed|completed|deployments|services [filter|no-header]: get running|failed|completed|deployments pods|deployments|services"
         fi
 
         if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
@@ -416,6 +421,9 @@ case "$1" in
 
         if [ "$1" == "deployments" ]; then
           REDIRECT=$CONFIG/tmp.1; runkctl get deployments -n $NAMESPACE
+            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        elif [ "$1" == "services" ]; then
+          REDIRECT=$CONFIG/tmp.1; runkctl get services -n $NAMESPACE
             cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         else
           REDIRECT=$CONFIG/tmp.1; runkctl get pods -n $NAMESPACE
@@ -650,7 +658,7 @@ case "$1" in
             type="pod"
             target=$2
           else
-            usage "  show pod|deployment|policy: describe resource\n  show '.': describe last described resource"
+            usage "  show pod|deployment|policy|service: describe resource\n  show '.': describe last described resource"
           fi
         else
           type=$2
@@ -746,6 +754,35 @@ case "$1" in
             esac
 
             echo $deployment > $CONFIG/last_describe_policy
+            ;;
+
+          "service")
+
+            service=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_service ]; then
+                error "You have never described any services"
+              fi
+              service=$(cat $CONFIG/last_describe_service)
+            fi
+
+            # Attempt expansion
+            expand_arg $service
+            if [ "$service" != "$ARG" ]; then
+              service=$ARG
+            fi
+
+            case "$1" in
+              "get")
+                runkctl get service $service -n $NAMESPACE
+                #I prefer the short output, but we need to decide..   -o $(cat $CONFIG/outputformat)
+                ;;
+              "show")
+                runkctl describe service $service -n $NAMESPACE
+                ;;
+            esac
+
+            echo $deployment > $CONFIG/last_describe_service
             ;;
 
           *)
@@ -1101,6 +1138,7 @@ case "$1" in
         echo "                       If found, then variables [1-N] is available for pod related commands"
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
+        echo "  services             Show services (alias 'sv')"
         echo ""
         echo "  filter [...]         Filter the 'pods|completed|failed|deployments' list. No argument clears the filter"
         echo ""
@@ -1115,11 +1153,13 @@ case "$1" in
         echo "       pod ...         Describe a pod"
         echo "       deployment ...  Describe a deployment"
         echo "       policy ...      Describe a network policy"
+        echo "       service ...     Describe a service"
         echo ""
         echo "  get ... ...          Get resource specs (variable expansion applies)"
         echo "       pod ...         Get pod spec."
         echo "       deployment ...  Get deployment spec."
         echo "       policy ...      Get network spec."
+        echo "       service ...     Get service spec."
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
         echo ""
