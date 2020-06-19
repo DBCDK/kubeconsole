@@ -113,6 +113,10 @@ echo "alias clip=\"cat $CONFIG/last | xclip\"" >> $RC
 echo "alias cpy=\"kubeconsole cpy\"" >> $RC
 echo "alias containers=\"kubeconsole show_containers\"" >> $RC
 echo "alias label=\"kubeconsole label\"" >> $RC
+echo "alias volumes=\"kubeconsole volumes\"" >> $RC
+echo "alias v=\"kubeconsole volumes\"" >> $RC
+echo "alias getv=\"kubeconsole get volume\"" >> $RC
+echo "alias showv=\"kubeconsole show volume\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -680,7 +684,7 @@ case "$1" in
             type="pod"
             target=$2
           else
-            usage "  show pod|deployment|policy|service: describe resource\n  show '.': describe last described resource"
+            usage "  show pod|deployment|policy|service|volume: describe resource\n  show '.': describe last described resource"
           fi
         else
           type=$2
@@ -805,6 +809,32 @@ case "$1" in
             esac
 
             echo $deployment > $CONFIG/last_describe_service
+            ;;
+
+          "volume")
+
+            volume=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_volume ]; then
+                error "You have never described any volumes"
+              fi
+              volume=$(cat $CONFIG/last_describe_volume)
+            fi
+
+            # Attempt expansion
+            expand_arg $volume vids
+            volume=$ARG
+
+            case "$1" in
+              "get")
+                runkctl get persistentvolumeclaim $volume -n $NAMESPACE -o $(cat $CONFIG/outputformat)
+                ;;
+              "show")
+                runkctl describe persistentvolumeclaim $volume -n $NAMESPACE
+                ;;
+            esac
+
+            echo $deployment > $CONFIG/last_describe_policy
             ;;
 
           *)
@@ -1151,6 +1181,27 @@ case "$1" in
         echo $dest > $CONFIG/last_copy_dest
         ;;
 
+      # Show persistent volume claims
+      "volumes")
+        if [ $# -ne 1 ]; then
+          usage "  volumes: get persistent volume claims"
+        fi
+
+        REDIRECT=$CONFIG/tmp; runkctl get persistentvolumeclaims -n $NAMESPACE
+        cnt=1
+        rm -f $CONFIG/vids
+        {
+          read
+          while read fn; do
+            echo "${cnt} = $fn"
+            volume=$(echo $fn | cut -d ' ' -f 1)
+            echo "${cnt}=$volume" >>  $CONFIG/vids
+            cnt=$((cnt+1))
+          done
+        } < $CONFIG/tmp
+        rm $CONFIG/tmp
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "        echo "Most commands will output usage help if run without parameters."
@@ -1176,6 +1227,8 @@ case "$1" in
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
         echo "  services             Show services (alias 'sv')"
+	echo ""
+	echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
         echo "  filter [...]         (also) Filter the 'pods|completed|failed|deployments' list by a string. No argument clears the filter"
         echo "  label [...[=...]]    (also) Filter the 'pods|completed|failed|deployments' list by a label. No argument clears the label"
@@ -1192,12 +1245,15 @@ case "$1" in
         echo "       deployment ...  Describe a deployment"
         echo "       policy ...      Describe a network policy"
         echo "       service ...     Describe a service"
+	echo "       volume ...      Describe a persistent volume claim"
         echo ""
         echo "  get ... ...          Get resource specs (variable expansion applies)"
         echo "       pod ...         Get pod spec."
         echo "       deployment ...  Get deployment spec."
         echo "       policy ...      Get network spec."
         echo "       service ...     Get service spec."
+	echo "       volume ...      Get persistent volume claim spec."
+	echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
         echo ""
