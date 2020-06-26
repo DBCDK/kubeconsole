@@ -91,6 +91,7 @@ echo "alias logp=\"kubeconsole logp\"" >> $RC
 echo "alias lp=\"kubeconsole logp\"" >> $RC
 echo "alias shell=\"kubeconsole shell\"" >> $RC
 echo "alias s=\"kubeconsole shell\"" >> $RC
+echo "alias ss=\"kubeconsole shell 1\"" >> $RC
 echo "alias ?=\"kubeconsole help\"" >> $RC
 echo "alias help=\"kubeconsole help\"" >> $RC
 echo "alias restart=\"kubeconsole restart\"" >> $RC
@@ -117,6 +118,9 @@ echo "alias volumes=\"kubeconsole volumes\"" >> $RC
 echo "alias v=\"kubeconsole volumes\"" >> $RC
 echo "alias getv=\"kubeconsole get volume\"" >> $RC
 echo "alias showv=\"kubeconsole show volume\"" >> $RC
+echo "alias run=\"kubeconsole run\"" >> $RC
+echo "alias r=\"kubeconsole run\"" >> $RC
+echo "alias rr=\"kubeconsole run 1\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -203,29 +207,46 @@ fi
 REDIRECT=
 APPEND=
 NOLOG=
+NONS=0
 runkctl () {
   if [ "$REDIRECT" != "" ]; then
     if [ ! -f "$CONFIG/no-header" ]; then
       cmd="$KCTL $@"
       echo -e "\033[0;90m$cmd\033[0;00m"
     fi
-    $KCTL $@ -n $NAMESPACE > "${REDIRECT}"
+    if [ "NONS" == "" ]; then
+      $KCTL $@ -n $NAMESPACE > "${REDIRECT}"
+    else
+      $KCTL $@ > "${REDIRECT}"
+    fi
   elif [ "$APPEND" != "" ]; then
     if [ ! -f "$CONFIG/no-header" ]; then
       cmd="$KCTL $@"
       echo -e "\033[0;90m$cmd\033[0;00m"
     fi
-    $KCTL $@ -n $NAMESPACE >> "${APPEND}"
+    if [ "NONS" == "" ]; then
+      $KCTL $@ -n $NAMESPACE >> "${APPEND}"
+    else
+      $KCTL $@ >> "${APPEND}"
+    fi
   else
     if [ ! -f "$CONFIG/no-header" ]; then
       cmd="$KCTL $@"
       echo -e "\033[0;90m$cmd\033[0;00m"
     fi
     if [ "$NOLOG" == "" ]; then
-      $KCTL $@ -n $NAMESPACE > $CONFIG/last
+      if [ "NONS" == "" ]; then
+        $KCTL $@ -n $NAMESPACE > $CONFIG/last
+      else
+        $KCTL $@ > $CONFIG/last
+      fi
       cat $CONFIG/last
     else
-      $KCTL $@ -n $NAMESPACE
+      if [ "NONS" == "" ]; then
+        $KCTL $@ -n $NAMESPACE
+      else
+        $KCTL $@
+      fi
     fi
   fi
 
@@ -889,11 +910,11 @@ case "$1" in
         expand_arg $pod
         pod=$ARG
 
-	# Get since time
-	since=$(cat $CONFIG/since)
+        # Get since time
+        since=$(cat $CONFIG/since)
 
         runkctl logs $pod --since=$since -n $NAMESPACE
-	cat $CONFIG/last
+        cat $CONFIG/last
         echo $pod > $CONFIG/last_log
         ;;
 
@@ -942,7 +963,7 @@ case "$1" in
         pod=$ARG
 
         runkctl logs $pod -n $NAMESPACE --previous
-	cat $CONFIG/last
+        cat $CONFIG/last
         echo $pod > $CONFIG/last_logp
         ;;
 
@@ -964,9 +985,40 @@ case "$1" in
         expand_arg $pod
         pod=$ARG
 
-	NOLOG=1
-        runkctl exec -it $pod -n $NAMESPACE "/bin/bash"
+        NOLOG=1
+        NONS=1
+        runkctl exec -it $pod -n $NAMESPACE -- "/bin/bash"
         echo $pod > $CONFIG/last_shell
+        ;;
+
+      # Run command in pod
+      "run")
+        if [ $# -ne 3 ]; then
+          if [ ! "$2" == "." ]; then
+            usage "  run 'pod id' 'command': enter this pod and run the command\n  run '.': enter same pod again and run the same command"
+          fi
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_shell ]; then
+             error "You have never entered any containers"
+           fi
+           pod=$(cat $CONFIG/last_run)
+           command=$(cat $CONFIG/last_run_command)
+        else
+          command=$3
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+        NOLOG=1
+        NONS=1
+        runkctl exec $pod -n $NAMESPACE -- $command
+        echo $pod > $CONFIG/last_run
+        echo $command > $CONFIG/last_run_command
         ;;
 
       # Restart pod
@@ -991,12 +1043,12 @@ case "$1" in
         expand_arg $pod
         pod=$ARG
 
-	if [ "$1" == "restart_confirmed" ]; then
+        if [ "$1" == "restart_confirmed" ]; then
           runkctl delete pod $pod -n $NAMESPACE
           echo $pod > $CONFIG/last_restart
         else
-	  confirm "Are you sure? restart pod $pod [yes|no]: "
-	  read answer
+          confirm "Are you sure? restart pod $pod [yes|no]: "
+          read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole restart_confirmed $pod
           else
@@ -1227,8 +1279,8 @@ case "$1" in
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
         echo "  services             Show services (alias 'sv')"
-	echo ""
-	echo "  volumes              Show persistent volume claims (alias 'v')"
+	    echo ""
+        echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
         echo "  filter [...]         (also) Filter the 'pods|completed|failed|deployments' list by a string. No argument clears the filter"
         echo "  label [...[=...]]    (also) Filter the 'pods|completed|failed|deployments' list by a label. No argument clears the label"
@@ -1245,15 +1297,15 @@ case "$1" in
         echo "       deployment ...  Describe a deployment"
         echo "       policy ...      Describe a network policy"
         echo "       service ...     Describe a service"
-	echo "       volume ...      Describe a persistent volume claim"
+        echo "       volume ...      Describe a persistent volume claim"
         echo ""
         echo "  get ... ...          Get resource specs (variable expansion applies)"
         echo "       pod ...         Get pod spec."
         echo "       deployment ...  Get deployment spec."
         echo "       policy ...      Get network spec."
         echo "       service ...     Get service spec."
-	echo "       volume ...      Get persistent volume claim spec."
-	echo ""
+        echo "       volume ...      Get persistent volume claim spec."
+        echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
         echo ""
@@ -1261,10 +1313,12 @@ case "$1" in
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
         echo "  logc ...             Get the complete log from a pod"
         echo "  logp ...             Get the previous log from a pod"
-	echo "  query ...            Search the complete logs from all pods selected by the current filter"
+        echo "  query ...            Search the complete logs from all pods selected by the current filter"
         echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
-	echo ""
-        echo "  shell ...            Enter pod and execute the shell"
+        echo ""
+        echo "  shell ...            Enter pod and execute the shell (alias 's', alias 'ss' = 's 1')"
+        echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1')"
+        echo ""
         echo "  restart ...          Delete a pod (which will then restart)"
         echo ""
         echo "  cpy ... ...          Copy a file to/from a pod"
