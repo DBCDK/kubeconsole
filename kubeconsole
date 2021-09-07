@@ -1246,7 +1246,7 @@ case "$1" in
 	while read pid; do
 	  pod=$(echo $pid | cut -d '=' -f 2)
 	  echo "===[ $pod ] =============="
-          runkctl logs $pod -n $NAMESPACE | grep $2
+          runkctl logs $pod -n $NAMESPACE | grep "$2"
 	done < "$CONFIG/pids"
 
         echo $pod > $CONFIG/last_query
