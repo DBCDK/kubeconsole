@@ -74,6 +74,7 @@ echo "alias f=\"kubeconsole failed\"" >> $RC
 echo "alias completed=\"kubeconsole completed\"" >> $RC
 echo "alias c=\"kubeconsole completed\"" >> $RC
 echo "alias deployments=\"kubeconsole deployments\"" >> $RC
+echo "alias sets=\"kubeconsole sets\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
 echo "alias services=\"kubeconsole services\"" >> $RC
 echo "alias sv=\"kubeconsole services\"" >> $RC
@@ -106,6 +107,7 @@ echo "alias img=\"kubeconsole img\"" >> $RC
 echo "alias container=\"kubeconsole container\"" >> $RC
 echo "alias cnt=\"kubeconsole container\"" >> $RC
 echo "alias scale=\"kubeconsole scale_deployment\"" >> $RC
+echo "alias scales=\"kubeconsole scale_set\"" >> $RC
 echo "alias foo=\"kubeconsole foo\"" >> $RC
 echo "alias filter=\"kubeconsole filter\"" >> $RC
 echo "alias since=\"kubeconsole since\"" >> $RC
@@ -440,8 +442,10 @@ case "$1" in
         ;&
 
       "pods")
+        ;&
+      "sets")
         if [ $# -lt 1 ]; then
-          usage "  pods|failed|completed|deployments|services [filter|no-header]: get running|failed|completed|deployments pods|deployments|services"
+          usage "  pods|failed|completed|deployments|services|sets [filter|no-header]: get running|failed|completed pods|deployments|services|sets"
         fi
 
         if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
@@ -466,6 +470,13 @@ case "$1" in
             REDIRECT=$CONFIG/tmp.1; runkctl get services -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get services -l $LABEL -n $NAMESPACE
+          fi
+            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        elif [ "$1" == "sets" ]; then
+          if [ -z $LABEL ]; then
+            REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -n $NAMESPACE
+          else
+            REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -l $LABEL -n $NAMESPACE
           fi
             cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         else
@@ -1121,6 +1132,54 @@ case "$1" in
         fi
         ;;
 
+      # Scale statefulset
+      "scale_set")
+        ;&
+
+      # Scale set, confirmed
+      "scale_set_confirmed")
+
+        if [ $# -ne 3 ]; then
+          usage "  scale #replicas: scale statefulset from local yml file\n  scale 'statefulset name' #replicas: scale this statefulset\n  scale '.' #replicas: scale last scaled statefulset"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_scale_set ]; then
+               error "You have never scaled any statefulsets"
+             fi
+             statefulset=$(cat $CONFIG/last_scale_set)
+          else
+            statefulset=$2
+          fi
+          replicas=$3
+        fi
+
+        # Attempt expansion
+        expand_arg $statefulset
+        if [ "$statefulset" != "$ARG" ]; then
+          statefulset=$ARG
+          statefulset=$(echo $statefulset | rev | cut -d '-' -f 3- | rev)
+        fi
+
+        # Possibly input value pod name
+        if [[ $statefulset =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $statefulset
+          statefulset=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "scale_set_confirmed" ]; then
+          runkctl scale statefulset --replicas $replicas $statefulset -n $NAMESPACE
+          echo $statefulset > $CONFIG/last_scale_set
+        else
+	  confirm "Are you sure? scale statefulset $statefulset to $replicas replicas [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole scale_set_confirmed $statefulset $replicas
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
       "filter")
 
         if [ $# -eq 1 ]; then
@@ -1279,7 +1338,8 @@ case "$1" in
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
         echo "  services             Show services (alias 'sv')"
-	    echo ""
+        echo "  sets                 Show statefulsets (alias ss)"
+        echo ""
         echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
         echo "  filter [...]         (also) Filter the 'pods|completed|failed|deployments' list by a string. No argument clears the filter"
@@ -1288,6 +1348,7 @@ case "$1" in
         echo "  apply ...            Apply deployment from a yaml file"
         echo "  delete ...           Delete deployment"
         echo "  scale ...            Scale deployment"
+        echo "  scales ...           Scale statefulset"
         echo ""
         echo "  json                 Set output format for the get command to JSON"
         echo "  yml                  Set output format for the get command to YAML"
