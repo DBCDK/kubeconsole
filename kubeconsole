@@ -75,6 +75,8 @@ echo "alias completed=\"kubeconsole completed\"" >> $RC
 echo "alias c=\"kubeconsole completed\"" >> $RC
 echo "alias deployments=\"kubeconsole deployments\"" >> $RC
 echo "alias sets=\"kubeconsole sets\"" >> $RC
+echo "alias jobs=\"kubeconsole cronjobs\"" >> $RC
+echo "alias j=\"kubeconsole cronjobs\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
 echo "alias services=\"kubeconsole services\"" >> $RC
 echo "alias sv=\"kubeconsole services\"" >> $RC
@@ -123,6 +125,7 @@ echo "alias showv=\"kubeconsole show volume\"" >> $RC
 echo "alias run=\"kubeconsole run\"" >> $RC
 echo "alias r=\"kubeconsole run\"" >> $RC
 echo "alias rr=\"kubeconsole run 1\"" >> $RC
+echo "alias q=\"exit\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -444,8 +447,10 @@ case "$1" in
       "pods")
         ;&
       "sets")
+        ;&
+      "cronjobs")
         if [ $# -lt 1 ]; then
-          usage "  pods|failed|completed|deployments|services|sets [filter|no-header]: get running|failed|completed pods|deployments|services|sets"
+          usage "  pods|failed|completed|deployments|services|sets|cronjobs [filter|no-header]: get running|failed|completed pods|deployments|services|sets|cronjobs"
         fi
 
         if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
@@ -477,6 +482,13 @@ case "$1" in
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -l $LABEL -n $NAMESPACE
+          fi
+            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        elif [ "$1" == "cronjobs" ]; then
+          if [ -z $LABEL ]; then
+            REDIRECT=$CONFIG/tmp.1; runkctl get cronjobs -n $NAMESPACE
+          else
+            REDIRECT=$CONFIG/tmp.1; runkctl get cronjobs -l $LABEL -n $NAMESPACE
           fi
             cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         else
@@ -1339,6 +1351,7 @@ case "$1" in
         echo "  deployments          Show deployments (alias 'd')"
         echo "  services             Show services (alias 'sv')"
         echo "  sets                 Show statefulsets (alias ss)"
+        echo "  jobs                 Show cronjobs (alias 'j')"
         echo ""
         echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
@@ -1387,6 +1400,8 @@ case "$1" in
         echo "  k ...                Run kubectl commands (do not add namespace)"
         echo ""
         echo "? or help              Show this help"
+        echo ""
+        echo "exit or q              Exit from the shell"
         ;;
 
         "version")
