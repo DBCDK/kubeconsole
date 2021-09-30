@@ -29,7 +29,7 @@ fi
 if [ $# -eq 1 ] && [[ "$1" == "-kk" ]]; then
   cluster=$(kubectl version | grep Server\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
   echo "Fetching kubectl version $cluster"
-  curl -sLO https://storage.googleapis.com/kubernetes-release/release/$cluster/bin/linux/amd64/kubectl
+  curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
   echo "Done. Move the new kubectl to a place on your path"
   exit
 fi
@@ -1333,7 +1333,8 @@ case "$1" in
         echo "Options:"
         echo "  kubeconsole -v       Show version and exit"
         echo "  kubeconsole -c       Fetch new kubeconfig"
-        echo "  kubeconsole -k       Fetch new kubectl"
+        echo "  kubeconsole -k       Check version of local kubectl vs latest"
+        echo "  kubeconsole -kk      Fetch new kubectl"
         echo "  kubeconsole -?       Show this help"
         echo "  kubeconsole /?       ...............Microsoft style"
         echo "  kubeconsole help     ...............with command"
