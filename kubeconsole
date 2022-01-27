@@ -84,6 +84,7 @@ echo "alias wp=\"kubeconsole watchpods\"" >> $RC
 echo "alias try=\"kubeconsole try_apply_deployment\"" >> $RC
 echo "alias apply=\"kubeconsole apply_deployment\"" >> $RC
 echo "alias delete=\"kubeconsole delete_deployment\"" >> $RC
+echo "alias deleteset=\"kubeconsole delete_set\"" >> $RC
 echo "alias namespaces=\"kubeconsole namespaces\"" >> $RC
 echo "alias log=\"kubeconsole log\"" >> $RC
 echo "alias l=\"kubeconsole log\"" >> $RC
@@ -126,6 +127,11 @@ echo "alias run=\"kubeconsole run\"" >> $RC
 echo "alias r=\"kubeconsole run\"" >> $RC
 echo "alias rr=\"kubeconsole run 1\"" >> $RC
 echo "alias q=\"exit\"" >> $RC
+echo "alias top=\"kubeconsole top\"" >> $RC
+echo "alias rollout=\"kubeconsole rollout\"" >> $RC
+echo "alias ro=\"kubeconsole rollout\"" >> $RC
+echo "alias rolloutset=\"kubeconsole rolloutset\"" >> $RC
+echo "alias ros=\"kubeconsole rolloutset\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -322,7 +328,20 @@ get_deployment_name() {
   DEPLOYMENT=$(echo $YML | cut -d '.' -f 1)
 }
 get_deployment_name_from_pod_name() {
-  DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 3- | rev)
+
+  # Set
+  if [[ $1 =~  ^([aA0-zZ9]+-)+([0-9a-f]{1,12})(-[0-9a-z]+)?$ ]]; then
+    DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 2- | rev)
+    return
+  fi
+
+  # Deployment
+  if [[ $1 =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+    DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 3- | rev)
+    return
+  fi
+
+  DEPLOYMENT=$1
 }
 
 start_shell() {
@@ -634,6 +653,56 @@ case "$1" in
 	  read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole delete_deployment_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Delete statefulset
+      "delete_set")
+        ;&
+
+      # Delete statefulset, confirmed
+      "delete_set_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  deleteset: delete statefulset from local yml file\n  delete 'statefulset name': delete this statefulset\n  delete '.': delete last deleted statefulset"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_delete_set ]; then
+               error "You have never deleted any statefulsets"
+             fi
+             deployment=$(cat $CONFIG/last_delete_set)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "delete_set_confirmed" ]; then
+          runkctl delete statefulset $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_delete_set
+        else
+	  confirm "Are you sure? delete statefulset $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole delete_set_confirmed $deployment
           else
             error "ok.. bad idea :)"
           fi
@@ -1173,7 +1242,7 @@ case "$1" in
         fi
 
         # Possibly input value pod name
-        if [[ $statefulset =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+        if [[ $statefulset =~  ^([aA0-zZ9]+-)+([0-9a-f]{1,12})(-[0-9a-z]+)?$ ]]; then
           get_deployment_name_from_pod_name $statefulset
           statefulset=$DEPLOYMENT
         fi
@@ -1325,6 +1394,129 @@ case "$1" in
         rm $CONFIG/tmp
         ;;
 
+      # Get pod resource usage
+      "top")
+
+        if [ $# -ne 2 ]; then
+          usage "  top 'pod id': get resource usage count from pod\n  top '.': get resource count from pod again"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_top ]; then
+             error "You have never fetched any resource counts"
+           fi
+           pod=$(cat $CONFIG/last_top)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+        runkctl top pod $pod -n $NAMESPACE
+        echo $pod > $CONFIG/last_top
+        ;;
+
+      # Restart deployment
+      "rollout")
+       ;&
+
+      # Restart deployment, confirmed
+      "rollout_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  rollout: Restart deployment from local yml file\n  rollout 'deployment name': Restart this deployment\n  rollout '.': Restart last restarted deployment"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_rollout ]; then
+               error "You have never restarted any deployments"
+             fi
+             deployment=$(cat $CONFIG/last_rollout)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "rollout_confirmed" ]; then
+          runkctl rollout restart deployment $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_rollout
+        else
+	  confirm "Are you sure? restart deployment $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole rollout_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Restart statefulset
+      "rolloutset")
+       ;&
+
+      # Restart statefulset, confirmed
+      "rolloutset_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  rollout: Restart statefulset from local yml file\n  rollout 'statefulset name': Restart this statefulset\n  rollout '.': Restart last restarted statefulset"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_rolloutset ]; then
+               error "You have never restarted any statefulset"
+             fi
+             deployment=$(cat $CONFIG/last_rolloutset)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{1,12})(-[0-9a-z]+)?$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "rolloutset_confirmed" ]; then
+          runkctl rollout restart statefulset $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_rolloutset
+        else
+	  confirm "Are you sure? restart statefulset $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole rolloutset_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "        echo "Most commands will output usage help if run without parameters."
@@ -1361,6 +1553,7 @@ case "$1" in
         echo ""
         echo "  apply ...            Apply deployment from a yaml file"
         echo "  delete ...           Delete deployment"
+        echo "  deleteset ...        Delete statefulset"
         echo "  scale ...            Scale deployment"
         echo "  scales ...           Scale statefulset"
         echo ""
@@ -1383,6 +1576,7 @@ case "$1" in
         echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
+        echo "  top ...              Get resource usage from pod"
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
@@ -1394,7 +1588,9 @@ case "$1" in
         echo "  shell ...            Enter pod and execute the shell (alias 's', alias 'ss' = 's 1')"
         echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1')"
         echo ""
-        echo "  restart ...          Delete a pod (which will then restart)"
+        echo "  restart ...          Restart a single pod"
+        echo "  rollout ...          Restart a full deployment (all pods)"
+        echo "  rolloutset ...       Restart a full set (all pods)"
         echo ""
         echo "  cpy ... ...          Copy a file to/from a pod"
         echo ""
