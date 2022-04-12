@@ -132,6 +132,8 @@ echo "alias rollout=\"kubeconsole rollout\"" >> $RC
 echo "alias ro=\"kubeconsole rollout\"" >> $RC
 echo "alias rolloutset=\"kubeconsole rolloutset\"" >> $RC
 echo "alias ros=\"kubeconsole rolloutset\"" >> $RC
+echo "alias deletejob=\"kubeconsole delete_job\"" >> $RC
+echo "alias createjob=\"kubeconsole create_job_from\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -703,6 +705,108 @@ case "$1" in
 	  read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole delete_set_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Delete job
+      "delete_job")
+        ;&
+
+      # Delete job, confirmed
+      "delete_job_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  delete_job: delete job from local yml file\n  delete_job 'job name': delete this job\n  delete_job '.': delete last deleted job"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_delete_job ]; then
+               error "You have never deleted any jobs"
+             fi
+             deployment=$(cat $CONFIG/last_delete_job)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+	if [ "$1" == "delete_job_confirmed" ]; then
+          runkctl delete job $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_delete_job
+        else
+	  confirm "Are you sure? delete job $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole delete_job_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Create job from, confirmed
+      "create_job_from")
+        ;&
+
+      # Create job from
+      "create_job_from_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  create_job_from: create manual job from local yml file\n  create_job_from 'job name': create manual job from this job\n  create_job_from '.': create last manual job"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_create_job ]; then
+               error "You have never created any jobs"
+             fi
+             deployment=$(cat $CONFIG/last_create_job)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+        new_job=$deployment-$(echo $USER | awk '{print tolower($0)}')
+
+	if [ "$1" == "create_job_from_confirmed" ]; then
+          runkctl create job $deployment $new_job -n $NAMESPACE
+          echo $deployment > $CONFIG/last_create_job
+        else
+	  confirm "Are you sure? create job $new_job from $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole create_job_from_confirmed $deployment
           else
             error "ok.. bad idea :)"
           fi
@@ -1587,6 +1691,9 @@ case "$1" in
         echo ""
         echo "  shell ...            Enter pod and execute the shell (alias 's', alias 'ss' = 's 1')"
         echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1')"
+        echo ""
+        echo "  deletejob [...]        Delete job"
+        echo "  createjob [...]        Create manual job from this (existing) job"
         echo ""
         echo "  restart ...          Restart a single pod"
         echo "  rollout ...          Restart a full deployment (all pods)"
