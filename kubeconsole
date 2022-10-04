@@ -699,6 +699,9 @@ case "$1" in
           deployment=$DEPLOYMENT
         fi
 
+        # Remove trailing '-N' indicating instances in the set
+        deployment=$(echo $deployment | sed 's/-[0-9]\+//g')
+
 	if [ "$1" == "delete_set_confirmed" ]; then
           runkctl delete statefulset $deployment -n $NAMESPACE
           echo $deployment > $CONFIG/last_delete_set
