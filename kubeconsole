@@ -134,6 +134,8 @@ echo "alias rolloutset=\"kubeconsole rolloutset\"" >> $RC
 echo "alias ros=\"kubeconsole rolloutset\"" >> $RC
 echo "alias deletejob=\"kubeconsole delete_job\"" >> $RC
 echo "alias createjob=\"kubeconsole create_job_from\"" >> $RC
+echo "alias disablejob=\"kubeconsole disable_job\"" >> $RC
+echo "alias enablejob=\"kubeconsole enable_job\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -807,6 +809,106 @@ case "$1" in
 	  read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole create_job_from_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Disable job
+      "disable_job")
+        ;&
+
+      # Disable job confirmed
+      "disable_job_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  disable_job: Disable cronjob from local yml file\n  disable_job 'job name': Disable this job\n  disable_job '.': Disable last disabled job"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_disable_job ]; then
+               error "You have never disabled any jobs"
+             fi
+             deployment=$(cat $CONFIG/last_disable_job)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+        if [ "$1" == "disable_job_confirmed" ]; then
+          runkctl patch cronjobs $deployment -p "{\"spec\":{\"suspend\":true}}" -n $NAMESPACE
+          echo $deployment > $CONFIG/last_disable_job
+        else
+          confirm "Are you sure? disable job $deployment [yes|no]: "
+          read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole disable_job_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Enable job
+      "enable_job")
+        ;&
+
+      # Enable job confirmed
+      "enable_job_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  enable_job: Enable cronjob from local yml file\n  enable_job 'job name': Enable this job\n  enable_job '.': Enable last disabled job"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_enable_job ]; then
+               error "You have never enabled any jobs"
+             fi
+             deployment=$(cat $CONFIG/last_enable_job)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+        if [ "$1" == "enable_job_confirmed" ]; then
+          runkctl patch cronjobs $deployment -p "{\"spec\":{\"suspend\":false}}" -n $NAMESPACE
+          echo $deployment > $CONFIG/last_enable_job
+        else
+          confirm "Are you sure? enable job $deployment [yes|no]: "
+          read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole enable_job_confirmed $deployment
           else
             error "ok.. bad idea :)"
           fi
@@ -1692,8 +1794,10 @@ case "$1" in
         echo "  shell ...            Enter pod and execute the shell (alias 's', alias 'ss' = 's 1')"
         echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1')"
         echo ""
-        echo "  deletejob [...]        Delete job"
-        echo "  createjob [...]        Create manual job from this (existing) job"
+        echo "  deletejob  [...]     Delete job"
+        echo "  createjob  [...]     Create manual job from this (existing) job"
+        echo "  disablejob [...]     Disable job"
+        echo "  enablejob  [...]     Enable job"
         echo ""
         echo "  restart ...          Restart a single pod"
         echo "  rollout ...          Restart a full deployment (all pods)"
