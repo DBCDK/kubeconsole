@@ -75,8 +75,10 @@ echo "alias completed=\"kubeconsole completed\"" >> $RC
 echo "alias c=\"kubeconsole completed\"" >> $RC
 echo "alias deployments=\"kubeconsole deployments\"" >> $RC
 echo "alias sets=\"kubeconsole sets\"" >> $RC
-echo "alias jobs=\"kubeconsole cronjobs\"" >> $RC
-echo "alias j=\"kubeconsole cronjobs\"" >> $RC
+echo "alias jobs=\"kubeconsole jobs\"" >> $RC
+echo "alias cronjobs=\"kubeconsole cronjobs\"" >> $RC
+echo "alias cj=\"kubeconsole cronjobs\"" >> $RC
+echo "alias j=\"kubeconsole jobs\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
 echo "alias services=\"kubeconsole services\"" >> $RC
 echo "alias sv=\"kubeconsole services\"" >> $RC
@@ -471,9 +473,11 @@ case "$1" in
         ;&
       "sets")
         ;&
+      "jobs")
+        ;&
       "cronjobs")
         if [ $# -lt 1 ]; then
-          usage "  pods|failed|completed|deployments|services|sets|cronjobs [filter|no-header]: get running|failed|completed pods|deployments|services|sets|cronjobs"
+          usage "  pods|failed|completed|deployments|services|sets|jobs|cronjobs [filter|no-header]: get running|failed|completed pods|deployments|services|sets|jobs|cronjobs"
         fi
 
         if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
@@ -505,6 +509,13 @@ case "$1" in
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -l $LABEL -n $NAMESPACE
+          fi
+            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        elif [ "$1" == "jobs" ]; then
+          if [ -z $LABEL ]; then
+            REDIRECT=$CONFIG/tmp.1; runkctl get jobs -n $NAMESPACE
+          else
+            REDIRECT=$CONFIG/tmp.1; runkctl get jobs -l $LABEL -n $NAMESPACE
           fi
             cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         elif [ "$1" == "cronjobs" ]; then
@@ -830,11 +841,11 @@ case "$1" in
           get_deployment_name $YML
           deployment=$DEPLOYMENT
         elif [ $# -ne 2 ]; then
-          usage "  disable_job: Disable cronjob from local yml file\n  disable_job 'job name': Disable this job\n  disable_job '.': Disable last disabled job"
+          usage "  disable_job: Disable cronjob from local yml file\n  disable_job 'cronjob name': Disable this cronjob\n  disable_job '.': Disable last disabled cronjob"
         else
           if [[ "$2" == "." ]]; then
              if ! [ -f $CONFIG/last_disable_job ]; then
-               error "You have never disabled any jobs"
+               error "You have never disabled any cronjobs"
              fi
              deployment=$(cat $CONFIG/last_disable_job)
           else
@@ -858,7 +869,7 @@ case "$1" in
           runkctl patch cronjobs $deployment -p "{\"spec\":{\"suspend\":true}}" -n $NAMESPACE
           echo $deployment > $CONFIG/last_disable_job
         else
-          confirm "Are you sure? disable job $deployment [yes|no]: "
+          confirm "Are you sure? disable cronjob $deployment [yes|no]: "
           read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole disable_job_confirmed $deployment
@@ -880,11 +891,11 @@ case "$1" in
           get_deployment_name $YML
           deployment=$DEPLOYMENT
         elif [ $# -ne 2 ]; then
-          usage "  enable_job: Enable cronjob from local yml file\n  enable_job 'job name': Enable this job\n  enable_job '.': Enable last disabled job"
+          usage "  enable_job: Enable cronjob from local yml file\n  enable_job 'cronjob name': Enable this cronjob\n  enable_job '.': Enable last disabled cronjob"
         else
           if [[ "$2" == "." ]]; then
              if ! [ -f $CONFIG/last_enable_job ]; then
-               error "You have never enabled any jobs"
+               error "You have never enabled any cronjobs"
              fi
              deployment=$(cat $CONFIG/last_enable_job)
           else
@@ -908,7 +919,7 @@ case "$1" in
           runkctl patch cronjobs $deployment -p "{\"spec\":{\"suspend\":false}}" -n $NAMESPACE
           echo $deployment > $CONFIG/last_enable_job
         else
-          confirm "Are you sure? enable job $deployment [yes|no]: "
+          confirm "Are you sure? enable cronjob $deployment [yes|no]: "
           read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole enable_job_confirmed $deployment
@@ -1006,7 +1017,7 @@ case "$1" in
             type="pod"
             target=$2
           else
-            usage "  show pod|deployment|policy|service|volume: describe resource\n  show '.': describe last described resource"
+            usage "  get|show pod|deployment|policy|service|volume: describe resource or spec.\n  get|show '.': describe last described resource or spec."
           fi
         else
           type=$2
@@ -1101,7 +1112,7 @@ case "$1" in
                 ;;
             esac
 
-            echo $deployment > $CONFIG/last_describe_policy
+            echo $policy > $CONFIG/last_describe_policy
             ;;
 
           "service")
@@ -1130,7 +1141,7 @@ case "$1" in
                 ;;
             esac
 
-            echo $deployment > $CONFIG/last_describe_service
+            echo $service > $CONFIG/last_describe_service
             ;;
 
           "volume")
@@ -1156,7 +1167,63 @@ case "$1" in
                 ;;
             esac
 
-            echo $deployment > $CONFIG/last_describe_policy
+            echo $volume > $CONFIG/last_describe_volume
+            ;;
+
+          "job")
+
+            job=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_job ]; then
+                error "You have never described any jobs"
+              fi
+              job=$(cat $CONFIG/last_describe_job)
+            fi
+
+            # Attempt expansion
+            expand_arg $job
+            if [ "$job" != "$ARG" ]; then
+              job=$ARG
+            fi
+
+            case "$1" in
+              "get")
+                error "You can not GET a job (use 'show')"
+                ;;
+              "show")
+                runkctl describe job $job -n $NAMESPACE
+                ;;
+            esac
+
+            echo $job > $CONFIG/last_describe_job
+            ;;
+
+          "cronjob")
+
+            cronjob=$target
+            if [[ "$target" == "." ]]; then
+              if ! [ -f $CONFIG/last_describe_conjob ]; then
+                error "You have never described any cronjobs"
+              fi
+              job=$(cat $CONFIG/last_describe_cronjob)
+            fi
+
+            # Attempt expansion
+            expand_arg $cronjob
+            if [ "$cronjob" != "$ARG" ]; then
+              cronjob=$ARG
+            fi
+
+            case "$1" in
+              "get")
+                runkctl get cronjob $cronjob -n $NAMESPACE
+                ;;
+              "show")
+                runkctl describe cronjob $cronjob -n $NAMESPACE
+                ;;
+            esac
+
+            echo $cronjob > $CONFIG/last_describe_cronjob
             ;;
 
           *)
@@ -1753,7 +1820,8 @@ case "$1" in
         echo "  deployments          Show deployments (alias 'd')"
         echo "  services             Show services (alias 'sv')"
         echo "  sets                 Show statefulsets (alias ss)"
-        echo "  jobs                 Show cronjobs (alias 'j')"
+        echo "  jobs                 Show jobs (alias 'j')"
+        echo "  cronjobs             Show cronjobs (alias 'cr')"
         echo ""
         echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
@@ -1775,6 +1843,7 @@ case "$1" in
         echo "       policy ...      Describe a network policy"
         echo "       service ...     Describe a service"
         echo "       volume ...      Describe a persistent volume claim"
+        echo "       cronjob ...     Describe a cronjob"
         echo ""
         echo "  get ... ...          Get resource specs (variable expansion applies)"
         echo "       pod ...         Get pod spec."
@@ -1782,6 +1851,8 @@ case "$1" in
         echo "       policy ...      Get network spec."
         echo "       service ...     Get service spec."
         echo "       volume ...      Get persistent volume claim spec."
+        echo "       job ...         Get job spec."
+        echo "       cronjob ...     Get cronjob spec."
         echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
@@ -1799,8 +1870,8 @@ case "$1" in
         echo ""
         echo "  deletejob  [...]     Delete job"
         echo "  createjob  [...]     Create manual job from this (existing) job"
-        echo "  disablejob [...]     Disable job"
-        echo "  enablejob  [...]     Enable job"
+        echo "  disablejob [...]     Disable cronjob"
+        echo "  enablejob  [...]     Enable cronjob"
         echo ""
         echo "  restart ...          Restart a single pod"
         echo "  rollout ...          Restart a full deployment (all pods)"
