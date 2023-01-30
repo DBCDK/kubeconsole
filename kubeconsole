@@ -10,6 +10,9 @@ KCTL=kubectl
 CONFIG=${HOME}/.kubeconsole
 mkdir -p $CONFIG
 
+# Full path to kubeconsole for direct execution
+KUBECONSOLE=$(dirname -- "$0";)/$(basename -- "$0";)
+
 # Check for configuration commands
 if [ $# -eq 1 ] && [[ "$1" == "-k" ]]; then
   latest=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
@@ -29,8 +32,9 @@ fi
 if [ $# -eq 1 ] && [[ "$1" == "-kk" ]]; then
   cluster=$(kubectl version | grep Server\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
   echo "Fetching kubectl version $cluster"
-  curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-  echo "Done. Move the new kubectl to a place on your path"
+  curl -o ~/Downloads/kubectl -L "https://dl.k8s.io/release/${cluster}/bin/linux/amd64/kubectl"
+  chmod u+x ~/Downloads/kubectl
+  echo "Done. Move the new \"~/Downloads/kubectl\" to a place on your path"
   exit
 fi
 if [ $# -eq 1 ] && [[ "$1" == "-c" ]]; then
@@ -41,11 +45,11 @@ fi
 
 # Show version or help
 if [ $# -eq 1 ] && [ "$1" == "-v" ]; then
-  kubeconsole version
+  $KUBECONSOLE version
   exit
 fi
 if [ $# -eq 1 ] && [ "$1" == "-?" -o "$1" == "-h" -o "$1" == "/?" -o "$1" == "/h" ]; then
-  kubeconsole help
+  $KUBECONSOLE help
   exit
 fi
 
