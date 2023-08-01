@@ -113,6 +113,7 @@ echo "alias gets=\"kubeconsole get service\"" >> $RC
 echo "alias shows=\"kubeconsole show service\"" >> $RC
 echo "alias env=\"kubeconsole env\"" >> $RC
 echo "alias img=\"kubeconsole img\"" >> $RC
+echo "alias url=\"kubeconsole url\"" >> $RC
 echo "alias container=\"kubeconsole container\"" >> $RC
 echo "alias cnt=\"kubeconsole container\"" >> $RC
 echo "alias scale=\"kubeconsole scale_deployment\"" >> $RC
@@ -952,7 +953,7 @@ case "$1" in
         pod=$ARG
 
 	REDIRECT=$CONFIG/envout
-        runkctl get pod $pod -n $NAMESPACE -o json 
+        runkctl get pod $pod -n $NAMESPACE -o json
         cat $CONFIG/envout | jq -r '.spec.containers | to_entries[].value.env[] | .name + " = " + .value'
 	rm $CONFIG/envout
 
@@ -984,6 +985,36 @@ case "$1" in
 
         echo $pod > $CONFIG/last_img
         ;;
+
+      # Show service url for a pod
+      "url")
+        if [ $# -ne 2 ]; then
+          usage "  url: Show service url\n  url '.': Show service url for last pod again"
+        fi
+
+        pod=$2
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_url ]; then
+            error "You have never shown url from any pods"
+          fi
+          pod=$(cat $CONFIG/last_url)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/urlout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        svc=$(cat $CONFIG/urlout | jq '.status.containerStatuses | .[].name' | sed 's/\"//g')
+        echo "http://$svc.$NAMESPACE.svc.cloud.dbc.dk"
+        echo "http://$svc.$NAMESPACE.svc.cloud.dbc.dk" | xclip -i
+        echo "http://$svc.$NAMESPACE.svc.cloud.dbc.dk" | xclip -selection clipboard
+	rm $CONFIG/urlout
+
+        echo $pod > $CONFIG/last_url
+        ;;
+
 
       # Show container for a pod
       "container")
@@ -1860,6 +1891,7 @@ case "$1" in
         echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
+        echo "  url ...              Get service url from pod"
         echo "  top ...              Get resource usage from pod"
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
