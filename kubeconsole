@@ -96,6 +96,9 @@ echo "alias log=\"kubeconsole log\"" >> $RC
 echo "alias l=\"kubeconsole log\"" >> $RC
 echo "alias logf=\"kubeconsole logf\"" >> $RC
 echo "alias logc=\"kubeconsole logc\"" >> $RC
+echo "alias lc=\"kubeconsole logc\"" >> $RC
+echo "alias llog=\"kubeconsole llog\"" >> $RC
+echo "alias ll=\"kubeconsole llog\"" >> $RC
 echo "alias lf=\"kubeconsole logf\"" >> $RC
 echo "alias logp=\"kubeconsole logp\"" >> $RC
 echo "alias lp=\"kubeconsole logp\"" >> $RC
@@ -1272,7 +1275,7 @@ case "$1" in
       "logc")
 
         if [ $# -ne 2 ]; then
-          usage "  logc 'pod id' [-f]: get complete log from this pod\n  log '.' [-f]: get complete log from same pod again"
+          usage "  logc 'pod id' [-f]: get complete log from this pod\n  logc '.' [-f]: get complete log from same pod again"
         fi
 
         pod=$2
@@ -1293,6 +1296,37 @@ case "$1" in
         runkctl logs $pod -n $NAMESPACE
 	cat $CONFIG/last
         echo $pod > $CONFIG/last_logc
+        ;;
+
+      # Get completelog from pod and show in less
+      "llog")
+
+        if [ $# -ne 2 ]; then
+          usage "  llog 'pod id' [-f]: get complete log from this pod and show in less\n  llog '.' [-f]: get complete log from same pod again and show in less"
+        fi
+
+        pod=$2
+        if [[ "$2" == "." ]]; then
+           if ! [ -f $CONFIG/last_llog ]; then
+             error "You have never fetched any logs"
+           fi
+           pod=$(cat $CONFIG/last_llog)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	# Get since time
+	since=$(cat $CONFIG/since)
+
+        REDIRECT=$CONFIG/tmp.l; runkctl logs $pod -n $NAMESPACE
+        #runkctl logs $pod -n $NAMESPACE
+
+	cat $CONFIG/last
+        echo $pod > $CONFIG/last_llog
+
+        less $CONFIG/tmp.l
         ;;
 
       "log")
@@ -1830,8 +1864,8 @@ case "$1" in
 
       "help")
 
-        echo "Available kubeconsole helper commands. "        echo "Most commands will output usage help if run without parameters."
-
+        echo "Available kubeconsole helper commands. "
+        echo "Most commands will output usage help if run without parameters."
         echo ""
         echo "Options:"
         echo "  kubeconsole -v       Show version and exit"
@@ -1839,6 +1873,7 @@ case "$1" in
         echo "  kubeconsole -k       Check version of local kubectl vs latest"
         echo "  kubeconsole -kk      Fetch new kubectl"
         echo "  kubeconsole -?       Show this help"
+        echo "  kubeconsole -h       ...............Linux style"
         echo "  kubeconsole /?       ...............Microsoft style"
         echo "  kubeconsole help     ...............with command"
         echo ""
@@ -1896,8 +1931,9 @@ case "$1" in
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
-        echo "  logc ...             Get the complete log from a pod"
-        echo "  logp ...             Get the previous log from a pod"
+        echo "  logc ...             Get the complete log from a pod (alias 'lc')"
+        echo "  llog ...             Get the complete log from a pod and show in less (alias 'll')"
+        echo "  logp ...             Get the previous log from a pod (alias 'lp')"
         echo "  query ...            Search the complete logs from all pods selected by the current filter"
         echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
         echo ""
