@@ -84,6 +84,7 @@ echo "alias cronjobs=\"kubeconsole cronjobs\"" >> $RC
 echo "alias cj=\"kubeconsole cronjobs\"" >> $RC
 echo "alias j=\"kubeconsole jobs\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
+echo "alias ds=\"kubeconsole selectors\"" >> $RC
 echo "alias services=\"kubeconsole services\"" >> $RC
 echo "alias sv=\"kubeconsole services\"" >> $RC
 echo "alias wp=\"kubeconsole watchpods\"" >> $RC
@@ -474,6 +475,9 @@ case "$1" in
       "deployments")
         ;&
 
+      "selectors")
+        ;&
+
       "services")
         ;&
 
@@ -485,7 +489,7 @@ case "$1" in
         ;&
       "cronjobs")
         if [ $# -lt 1 ]; then
-          usage "  pods|failed|completed|deployments|services|sets|jobs|cronjobs [filter|no-header]: get running|failed|completed pods|deployments|services|sets|jobs|cronjobs"
+          usage "  pods|failed|completed|deployments|selectors|services|sets|jobs|cronjobs [filter|no-header]: get running|failed|completed pods|deployments|selectors|services|sets|jobs|cronjobs"
         fi
 
         if [ $# -eq 2 ] && [ ! $2 == "no-header" ]; then
@@ -504,48 +508,56 @@ case "$1" in
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get deployments -l $LABEL -n $NAMESPACE
           fi
-            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+        elif [ "$1" == "selectors" ]; then
+          if [ -z $LABEL ]; then
+            REDIRECT=$CONFIG/tmp.1; runkctl get deployments -n $NAMESPACE -o wide
+          else
+            REDIRECT=$CONFIG/tmp.1; runkctl get deployments -l $LABEL -n $NAMESPACE -o wide
+          fi
+          cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/  //g' | cut -d ' ' -f 1,6 | column -t > $CONFIG/tmp
         elif [ "$1" == "services" ]; then
           if [ -z $LABEL ]; then
             REDIRECT=$CONFIG/tmp.1; runkctl get services -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get services -l $LABEL -n $NAMESPACE
           fi
-            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         elif [ "$1" == "sets" ]; then
           if [ -z $LABEL ]; then
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get statefulsets -l $LABEL -n $NAMESPACE
           fi
-            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         elif [ "$1" == "jobs" ]; then
           if [ -z $LABEL ]; then
             REDIRECT=$CONFIG/tmp.1; runkctl get jobs -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get jobs -l $LABEL -n $NAMESPACE
           fi
-            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         elif [ "$1" == "cronjobs" ]; then
           if [ -z $LABEL ]; then
             REDIRECT=$CONFIG/tmp.1; runkctl get cronjobs -n $NAMESPACE
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get cronjobs -l $LABEL -n $NAMESPACE
           fi
-            cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" > $CONFIG/tmp
         else
           if [ -z $LABEL ]; then
-            REDIRECT=$CONFIG/tmp.1; runkctl get pods -n $NAMESPACE;
+            REDIRECT=$CONFIG/tmp.1; runkctl get pods -n $NAMESPACE -o wide;
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get pods -l $LABEL -n $NAMESPACE;
           fi
+
 
           if [ "$1" == "failed" ]; then
             cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -E '^\S+ +[0-9]+/[0-9]+ +Running +[1-9][0-9]*' > $CONFIG/tmp
           elif [ "$1" == "completed" ]; then
             cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -E '^\S+ +[0-9]+/[0-9]+ +Completed +[0-9][0-9]*' > $CONFIG/tmp
-          else
-            cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -Ev '^\S+ +[0-9]+/[0-9]+ +Completed +[0-9][0-9]*' > $CONFIG/tmp
+          elif [ "$1" == "pods" ]; then
+            cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/\t/ /g' | grep -Ev '^\S+ +[0-9]+/[0-9]+ +Completed +[0-9][0-9]*' | sed 's/<none>//g' | sed 's/\ *$//' > $CONFIG/tmp
           fi
           rm $CONFIG/tmp.1
         fi
@@ -1882,12 +1894,14 @@ case "$1" in
         echo "  namespaces           List abbreviated namespaces"
         echo ""
         echo "  pods                 Show pods in namespace (alias 'p')"
+        echo "  containers           Show containers in namespace"
         echo "  completed            Show pods with status 'Completed' (alias 'c')"
         echo "  failed               Show pods with restarts (alias 'f')"
         echo "  wp                   Show pods in namespace using 'watch -n 1'"
         echo "                       If found, then variables [1-N] is available for pod related commands"
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
+        echo "  selectors            Show deployment selectors (alias 'ds')"
         echo "  services             Show services (alias 'sv')"
         echo "  sets                 Show statefulsets (alias ss)"
         echo "  jobs                 Show jobs (alias 'j')"
