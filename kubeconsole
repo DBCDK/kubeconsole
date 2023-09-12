@@ -101,6 +101,7 @@ echo "alias logf=\"kubeconsole logf\"" >> $RC
 echo "alias logc=\"kubeconsole logc\"" >> $RC
 echo "alias jlogc=\"kubeconsole jlogc\"" >> $RC
 echo "alias lc=\"kubeconsole logc\"" >> $RC
+echo "alias jlc=\"kubeconsole jlogc\"" >> $RC
 echo "alias llog=\"kubeconsole llog\"" >> $RC
 echo "alias jllog=\"kubeconsole jllog\"" >> $RC
 echo "alias ll=\"kubeconsole llog\"" >> $RC
@@ -1969,9 +1970,12 @@ case "$1" in
         echo "  top ...              Get resource usage from pod"
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
+        echo "  jlog ...             Get the java log pretty printed from a pod (alias 'jl')"
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
         echo "  logc ...             Get the complete log from a pod (alias 'lc')"
+        echo "  jlogc ...            Get the complete java log pretty printed from a pod (alias 'jlc')"
         echo "  llog ...             Get the complete log from a pod and show in less (alias 'll')"
+        echo "  jllog ...            Get the complete java log pretty printed from a pod and show in less (alias 'jll')"
         echo "  logp ...             Get the previous log from a pod (alias 'lp')"
         echo "  query ...            Search the complete logs from all pods selected by the current filter"
         echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
