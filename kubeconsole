@@ -94,12 +94,17 @@ echo "alias delete=\"kubeconsole delete_deployment\"" >> $RC
 echo "alias deleteset=\"kubeconsole delete_set\"" >> $RC
 echo "alias namespaces=\"kubeconsole namespaces\"" >> $RC
 echo "alias log=\"kubeconsole log\"" >> $RC
+echo "alias jlog=\"kubeconsole jlog\"" >> $RC
 echo "alias l=\"kubeconsole log\"" >> $RC
+echo "alias jl=\"kubeconsole jlog\"" >> $RC
 echo "alias logf=\"kubeconsole logf\"" >> $RC
 echo "alias logc=\"kubeconsole logc\"" >> $RC
+echo "alias jlogc=\"kubeconsole jlogc\"" >> $RC
 echo "alias lc=\"kubeconsole logc\"" >> $RC
 echo "alias llog=\"kubeconsole llog\"" >> $RC
+echo "alias jllog=\"kubeconsole jllog\"" >> $RC
 echo "alias ll=\"kubeconsole llog\"" >> $RC
+echo "alias jll=\"kubeconsole jllog\"" >> $RC
 echo "alias lf=\"kubeconsole logf\"" >> $RC
 echo "alias logp=\"kubeconsole logp\"" >> $RC
 echo "alias lp=\"kubeconsole logp\"" >> $RC
@@ -1284,6 +1289,8 @@ case "$1" in
         ;;
 
       # Get log from pod
+      "jlogc")
+        ;&
       "logc")
 
         if [ $# -ne 2 ]; then
@@ -1306,11 +1313,18 @@ case "$1" in
 	since=$(cat $CONFIG/since)
 
         runkctl logs $pod -n $NAMESPACE
-	cat $CONFIG/last
+        if [ "$1" = "jlogc" ]
+        then
+          cat $CONFIG/last | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g'
+        else
+          cat $CONFIG/last
+        fi
         echo $pod > $CONFIG/last_logc
         ;;
 
       # Get completelog from pod and show in less
+      "jllog")
+        ;&
       "llog")
 
         if [ $# -ne 2 ]; then
@@ -1333,14 +1347,20 @@ case "$1" in
 	since=$(cat $CONFIG/since)
 
         REDIRECT=$CONFIG/tmp.l; runkctl logs $pod -n $NAMESPACE
-        #runkctl logs $pod -n $NAMESPACE
 
-	cat $CONFIG/last
+        if [ "$1" = "jllog" ]
+        then
+          cat $CONFIG/tmp.l | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g' > $CONFIG/tmp.l.tmp
+          mv $CONFIG/tmp.l.tmp $CONFIG/tmp.l
+        fi
+
         echo $pod > $CONFIG/last_llog
 
         less $CONFIG/tmp.l
         ;;
 
+      "jlog")
+        ;&
       "log")
 
         if [ $# -ne 2 ]; then
@@ -1363,7 +1383,12 @@ case "$1" in
         since=$(cat $CONFIG/since)
 
         runkctl logs $pod --since=$since -n $NAMESPACE
-        cat $CONFIG/last
+        if [ "$1" = "jlog" ]
+        then
+          cat $CONFIG/last | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g'
+        else
+          cat $CONFIG/last
+        fi
         echo $pod > $CONFIG/last_log
         ;;
 
