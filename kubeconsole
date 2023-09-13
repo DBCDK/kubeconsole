@@ -240,6 +240,7 @@ REDIRECT=
 APPEND=
 NOLOG=
 NONS=0
+NOCAT=
 runkctl () {
   if [ "$REDIRECT" != "" ]; then
     if [ ! -f "$CONFIG/no-header" ]; then
@@ -272,7 +273,9 @@ runkctl () {
       else
         $KCTL $@ > $CONFIG/last
       fi
-      cat $CONFIG/last
+      if [ -z $NOCAT ]; then
+        cat $CONFIG/last
+      fi
     else
       if [ "NONS" == "" ]; then
         $KCTL $@ -n $NAMESPACE
@@ -1313,10 +1316,11 @@ case "$1" in
 	# Get since time
 	since=$(cat $CONFIG/since)
 
+        NOCAT=1
         runkctl logs $pod -n $NAMESPACE
         if [ "$1" = "jlogc" ]
         then
-          cat $CONFIG/last | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g'
+          cat $CONFIG/last | grep timestamp | jq -C . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g'
         else
           cat $CONFIG/last
         fi
@@ -1351,7 +1355,7 @@ case "$1" in
 
         if [ "$1" = "jllog" ]
         then
-          cat $CONFIG/tmp.l | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g' > $CONFIG/tmp.l.tmp
+          cat $CONFIG/tmp.l | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g' > $CONFIG/tmp.l.tmp
           mv $CONFIG/tmp.l.tmp $CONFIG/tmp.l
         fi
 
@@ -1383,10 +1387,11 @@ case "$1" in
         # Get since time
         since=$(cat $CONFIG/since)
 
+        NOCAT=1
         runkctl logs $pod --since=$since -n $NAMESPACE
         if [ "$1" = "jlog" ]
         then
-          cat $CONFIG/last | grep timestamp | jq . | sed 's/\\n/\n/g' | sed 's/\\t/    /g'
+          cat $CONFIG/last | grep timestamp | jq -C . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g'
         else
           cat $CONFIG/last
         fi
