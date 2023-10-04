@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Version
-VERSION=1.14.1
+VERSION=1.15.0
+
+# Kubeconfig url
+KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
 
 # Set kubectl
-KCTL=kubectl
+KCTL=~/bin/kubectl
 
 # Configuration paths
 CONFIG=${HOME}/.kubeconsole
@@ -14,7 +17,15 @@ mkdir -p $CONFIG
 KUBECONSOLE=$(dirname -- "$0";)/$(basename -- "$0";)
 
 # Check for configuration commands
-if [ $# -eq 1 ] && [[ "$1" == "-k" ]]; then
+if [ $# -eq 1 ] && [[ "$1" == "-k" ]];
+then
+  ls ~/bin/kubectl
+  if [ ! $? -eq 0 ];
+  then
+    echo "No kubectl found. Run \"kubeconsole -kk\" to get kubectl"
+    exit
+  fi
+
   latest=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
   echo "Latest kubectl is: $latest"
 
@@ -25,21 +36,83 @@ if [ $# -eq 1 ] && [[ "$1" == "-k" ]]; then
   echo "Cluster is running: $cluster"
 
   if [ ! "$client" == "$cluster" ]; then
-    echo "To get get a new kubectl, execute 'kubeconsole -kk', then place it on the path"
+    echo "To get get a new kubectl, run 'kubeconsole -kk'"
   fi
   exit
 fi
+
 if [ $# -eq 1 ] && [[ "$1" == "-kk" ]]; then
-  cluster=$(kubectl version | grep Server\ Version | cut -d ' ' -f 5 | cut -d ':' -f 2 | sed 's/[\",]//g')
-  echo "Fetching kubectl version $cluster"
-  curl -o ~/Downloads/kubectl -L "https://dl.k8s.io/release/${cluster}/bin/linux/amd64/kubectl"
+  mkdir -p ~/bin
+  echo "Fetching kubectl"
+  curl -o ~/Downloads/kubectl https://platform-dist.dbccloud.dk/kubectl
   chmod u+x ~/Downloads/kubectl
-  echo "Done. Move the new \"~/Downloads/kubectl\" to a place on your path"
+  mv ~/Downloads/kubectl ~/bin/.
+  echo "Done."
   exit
 fi
+
 if [ $# -eq 1 ] && [[ "$1" == "-c" ]]; then
-  echo "Go to 'http://kube-login.default.svc.cloud.dbc.dk:5555/' to get a kubeconfig"
-  echo "Then create the directory '.kube' and add the configuration to the file 'config' there"
+  echo "Go to '$KUBECONFIG' to get a config file,"
+  echo "then create the directory '.kube' and add the configuration to the file 'config' there."
+  echo
+  echo "You can also run \"kubeconsole -cc\" to interactively fetch a config file"
+
+  echo
+  which xclip > /dev/null
+  if [ $? -eq 0 ];
+  then
+    echo "$KUBECONFIG" | xclip -selection clipboard
+    echo "(hint: the url has been copied to your clipboard, just pop into your browser now...)"
+  else
+    echo "(If you 'sudo apt install xclip' the url will be copied directly to your clipboard)"
+  fi
+
+  exit
+fi
+
+if [ $# -eq 1 ] && [[ "$1" == "-cc" ]]; then
+  which xclip > /dev/null
+  if [ ! $? -eq 0 ];
+  then
+    echo "Please 'sudo apt install xclip' to use the '-cc' command."
+  fi
+  which xdg-open > /dev/null
+  if [ ! $? -eq 0 ];
+  then
+    echo "Please 'sudo apt install xdg-open' to use the '-cc' command."
+  fi
+
+  echo "A browser will open. Log in and click the button \"kopier til udklipsholder\" below"
+  echo "the box containing \"kubeconfig\" content. Then return to this console and press 'c'"
+  echo
+  echo "Press 'c'+ENTER to continue"
+  while read -r -s key;
+  do
+    if [ "$key" = "c" ];
+    then
+      break
+    fi
+  done
+  echo
+
+  xdg-open $KUBECONFIG &> /dev/null
+  echo "When you have copied to content of the \"kubeconfig\" box to the clipboard, then press 'c'+ENTER to continue...: "
+  while read -r -s key;
+  do
+    if [ "$key" = "c" ];
+    then
+      break
+    fi
+  done
+
+  content=$(xclip -o -selection clipboard)
+  if [[ "$content" =~ "client-id: kube-login" ]];
+  then
+    mkdir -p ~/.kube
+    xclip -o -selection clipboard > ~/.kube/config
+  else
+    echo "No kubeconfig content was found on the clipboard. Did you copy the content ?"
+  fi
   exit
 fi
 
@@ -51,6 +124,19 @@ fi
 if [ $# -eq 1 ] && [ "$1" == "-?" -o "$1" == "-h" -o "$1" == "/?" -o "$1" == "/h" ]; then
   $KUBECONSOLE help
   exit
+fi
+
+# Check if either kubectl or config is missing
+if [ ! -f ~/bin/kubectl ];
+then
+  echo "No kubectl binary found in  ~/bin. Please run \"kubeconsole -kk\" to download kubectl"
+  exit 1
+fi
+if [ ! -f ~/.kube/config ];
+then
+  echo "No config found in ~/.kube. Please run \"kubeconsole -c\" to get instructions on how to get a fresh config file,"
+  echo "or \"kubeconsole -cc\" to interactively fetch a new config file"
+  exit 1
 fi
 
 # Namespaces directory
