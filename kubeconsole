@@ -6,6 +6,9 @@ VERSION=1.15.0
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
 
+# Script Git url
+GITURL="https://raw.githubusercontent.com/DBCDK/kubeconsole/master/kubeconsole"
+
 # Set kubectl
 KCTL=~/bin/kubectl
 
@@ -15,6 +18,26 @@ mkdir -p $CONFIG
 
 # Full path to kubeconsole for direct execution
 KUBECONSOLE=$(dirname -- "$0";)/$(basename -- "$0";)
+
+# Check if version is behind
+found=$(find ~/.kubeconsole/versioncheck -cmin +7200 | wc -l)
+echo found=$found
+if [ $found -ne 0 ]
+then
+  echo "Checking version..."
+  sleep 3
+  rm $CONFIG/versioncheck
+  curl -o $CONFIG/versioncheck "$GITURL" &> /dev/null
+  latest=$(cat $CONFIG/versioncheck | grep "VERSION=" | cut -d '=' -f 2)
+  if [ ! "$latest" = "$VERSION" ];
+  then
+    echo "This version of kubectl is $VERSION"
+    echo "Newest version of kubectl is $latest"
+    echo
+    echo "Please fetch newest version of kubeconsole by using 'git pull'"
+    exit
+  fi
+fi
 
 # Check for configuration commands
 if [ $# -eq 1 ] && [[ "$1" == "-k" ]];
