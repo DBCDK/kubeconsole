@@ -25,10 +25,9 @@ echo found=$found
 if [ $found -ne 0 ]
 then
   echo "Checking version..."
-  sleep 3
   rm $CONFIG/versioncheck
   curl -o $CONFIG/versioncheck "$GITURL" &> /dev/null
-  latest=$(cat $CONFIG/versioncheck | grep "VERSION=" | cut -d '=' -f 2)
+  latest=$(cat $CONFIG/versioncheck | grep "^VERSION=[0-9.]*" | cut -d '=' -f 2)
   if [ ! "$latest" = "$VERSION" ];
   then
     echo "This version of kubectl is $VERSION"
@@ -36,6 +35,11 @@ then
     echo
     echo "Please fetch newest version of kubeconsole by using 'git pull'"
     exit
+  else
+    echo "This version of kubectl is $VERSION"
+    echo "Newest version of kubectl is $latest"
+    echo
+    echo "Kubeconsole is up2date"
   fi
 fi
 
