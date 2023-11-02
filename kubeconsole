@@ -209,6 +209,8 @@ echo "alias try=\"kubeconsole try_apply_deployment\"" >> $RC
 echo "alias apply=\"kubeconsole apply_deployment\"" >> $RC
 echo "alias delete=\"kubeconsole delete_deployment\"" >> $RC
 echo "alias deleteset=\"kubeconsole delete_set\"" >> $RC
+echo "alias deleteservice=\"kubeconsole delete_service\"" >> $RC
+echo "alias ds=\"kubeconsole delete_service\"" >> $RC
 echo "alias namespaces=\"kubeconsole namespaces\"" >> $RC
 echo "alias log=\"kubeconsole log\"" >> $RC
 echo "alias jlog=\"kubeconsole jlog\"" >> $RC
@@ -471,7 +473,7 @@ get_deployment_name() {
 get_deployment_name_from_pod_name() {
 
   # Set
-  if [[ $1 =~  ^([aA0-zZ9]+-)+([0-9a-f]{1,12})(-[0-9a-z]+)?$ ]]; then
+  if [[ $1 =~  ^([aA0-zZ9]+-)+([0-9a-f]{1,12})?$ ]]; then
     DEPLOYMENT=$(echo $1 | rev | cut -d '-' -f 2- | rev)
     return
   fi
@@ -867,6 +869,59 @@ case "$1" in
 	  read answer
           if [ "$answer" = "yes" ]; then
             kubeconsole delete_set_confirmed $deployment
+          else
+            error "ok.. bad idea :)"
+          fi
+        fi
+        ;;
+
+      # Delete service
+      "delete_service")
+        ;&
+
+      # Delete service, confirmed
+      "delete_service_confirmed")
+
+        if [ $# -eq 1 ]; then
+          get_yml_file
+          get_deployment_name $YML
+          deployment=$DEPLOYMENT
+        elif [ $# -ne 2 ]; then
+          usage "  deleteservice 'service name': delete this service\n  delete '.': delete last deleted service"
+        else
+          if [[ "$2" == "." ]]; then
+             if ! [ -f $CONFIG/last_delete_service ]; then
+               error "You have never deleted any services"
+             fi
+             deployment=$(cat $CONFIG/last_delete_service)
+          else
+            deployment=$2
+          fi
+        fi
+
+        # Attempt expansion
+        expand_arg $deployment
+        if [ "$deployment" != "$ARG" ]; then
+          deployment=$ARG
+        fi
+        # Possibly input value pod name
+        if [[ $deployment =~  ^([aA0-zZ9]+-)+([0-9a-f]{8,12}-[0-9a-z]+)$ ]]; then
+          get_deployment_name_from_pod_name $deployment
+          deployment=$DEPLOYMENT
+        fi
+
+
+        # Remove trailing '-N' indicating instances in the set
+        deployment=$(echo $deployment | sed 's/-[0-9]\+//g')
+
+	if [ "$1" == "delete_service_confirmed" ]; then
+          runkctl delete services $deployment -n $NAMESPACE
+          echo $deployment > $CONFIG/last_delete_service
+        else
+	  confirm "Are you sure? delete service $deployment [yes|no]: "
+	  read answer
+          if [ "$answer" = "yes" ]; then
+            kubeconsole delete_service_confirmed $deployment
           else
             error "ok.. bad idea :)"
           fi
@@ -2063,6 +2118,7 @@ case "$1" in
         echo "  apply ...            Apply deployment from a yaml file"
         echo "  delete ...           Delete deployment"
         echo "  deleteset ...        Delete statefulset"
+        echo "  deleteservice ...    Delete service (alias 'ds')"
         echo "  scale ...            Scale deployment"
         echo "  scales ...           Scale statefulset"
         echo ""
