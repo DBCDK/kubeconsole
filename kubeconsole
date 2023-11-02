@@ -272,6 +272,9 @@ echo "alias deletejob=\"kubeconsole delete_job\"" >> $RC
 echo "alias createjob=\"kubeconsole create_job_from\"" >> $RC
 echo "alias disablejob=\"kubeconsole disable_job\"" >> $RC
 echo "alias enablejob=\"kubeconsole enable_job\"" >> $RC
+echo "alias exec=\"kubeconsole run\"" >> $RC
+echo "alias e=\"kubeconsole run\"" >> $RC
+echo "alias ee=\"kubeconsole run 1\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -2159,7 +2162,8 @@ case "$1" in
         echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
         echo ""
         echo "  shell ...            Enter pod and execute the shell (alias 's', alias 'ss' = 's 1')"
-        echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1')"
+        echo "  run ... ...          Run a command in a pod (alias 'r', alias 'rr' = 'r 1 ...')"
+        echo "  exec ... ...         Same as 'run' (alias 'e', alias 'e' = 'r 1 ...')"
         echo ""
         echo "  deletejob  [...]     Delete job"
         echo "  createjob  [...]     Create manual job from this (existing) job"
