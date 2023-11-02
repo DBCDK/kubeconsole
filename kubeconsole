@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.1
+VERSION=1.15.2
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
