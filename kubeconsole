@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.2
+VERSION=1.15.3
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -201,7 +201,7 @@ echo "alias cronjobs=\"kubeconsole cronjobs\"" >> $RC
 echo "alias cj=\"kubeconsole cronjobs\"" >> $RC
 echo "alias j=\"kubeconsole jobs\"" >> $RC
 echo "alias d=\"kubeconsole deployments\"" >> $RC
-echo "alias ds=\"kubeconsole selectors\"" >> $RC
+echo "alias selectors=\"kubeconsole selectors\"" >> $RC
 echo "alias services=\"kubeconsole services\"" >> $RC
 echo "alias sv=\"kubeconsole services\"" >> $RC
 echo "alias wp=\"kubeconsole watchpods\"" >> $RC
@@ -275,6 +275,7 @@ echo "alias enablejob=\"kubeconsole enable_job\"" >> $RC
 echo "alias exec=\"kubeconsole run\"" >> $RC
 echo "alias e=\"kubeconsole run\"" >> $RC
 echo "alias ee=\"kubeconsole run 1\"" >> $RC
+echo "alias inspect=\"kubeconsole inspect\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -427,6 +428,15 @@ error () {
 # Print error and exit
 confirm () {
   echo -e -n "\033[0;\e[93m$1\033[0;00m"
+}
+
+has_pods() {
+  if [ -f $CONFIG/pids ] && [[ $(wc -l $CONFIG/pids) > 0 ]]
+  then
+    return 0
+  else
+    return 1
+  fi
 }
 
 ARG=
@@ -646,7 +656,7 @@ case "$1" in
           else
             REDIRECT=$CONFIG/tmp.1; runkctl get deployments -l $LABEL -n $NAMESPACE -o wide
           fi
-          cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/  //g' | cut -d ' ' -f 1,6 | column -t > $CONFIG/tmp
+          cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/  */ /g' | cut -d ' ' -f 1,8 | column -t > $CONFIG/tmp
         elif [ "$1" == "services" ]; then
           if [ -z $LABEL ]; then
             REDIRECT=$CONFIG/tmp.1; runkctl get services -n $NAMESPACE
@@ -1136,10 +1146,16 @@ case "$1" in
       # Show only environment settings for a pod
       "env")
         if [ $# -ne 2 ]; then
-          usage "  env: Show environment variables\n  show '.': Show environment variables for last pod again"
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  env: Show environment variables\n  show '.': Show environment variables for last pod again"
+         fi
+        else
+          pod=$2
         fi
 
-        pod=$2
         if [[ "$target" == "." ]]; then
           if ! [ -f $CONFIG/last_env ]; then
             error "You have never show environment variables from any pods"
@@ -1162,10 +1178,16 @@ case "$1" in
       # Show only the image used by a pod
       "img")
         if [ $# -ne 2 ]; then
-          usage "  img: Show pod image\n  show '.': Show image for last pod again"
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  img: Show pod image\n  show '.': Show image for last pod again"
+          fi
+        else
+          pod=$2
         fi
 
-        pod=$2
         if [[ "$target" == "." ]]; then
           if ! [ -f $CONFIG/last_img ]; then
             error "You have never show image from any pods"
@@ -1179,7 +1201,9 @@ case "$1" in
 
 	REDIRECT=$CONFIG/imgout
         runkctl get pod $pod -n $NAMESPACE -o json
-        cat $CONFIG/imgout | jq -r '.spec.containers | to_entries[].value.image'
+        image=$(cat $CONFIG/imgout | jq -r '.spec.containers | to_entries[].value.image')
+        echo $image
+        echo "$image" | xclip -selection clipboard
 	rm $CONFIG/imgout
 
         echo $pod > $CONFIG/last_img
@@ -1188,10 +1212,16 @@ case "$1" in
       # Show service url for a pod
       "url")
         if [ $# -ne 2 ]; then
-          usage "  url: Show service url\n  url '.': Show service url for last pod again"
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  url: Show service url\n  url '.': Show service url for last pod again"
+         fi
+        else
+          pod=$2
         fi
 
-        pod=$2
         if [[ "$target" == "." ]]; then
           if ! [ -f $CONFIG/last_url ]; then
             error "You have never shown url from any pods"
@@ -1961,10 +1991,16 @@ case "$1" in
       "top")
 
         if [ $# -ne 2 ]; then
-          usage "  top 'pod id': get resource usage count from pod\n  top '.': get resource count from pod again"
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  top 'pod id': get resource usage count from pod\n  top '.': get resource count from pod again"
+         fi
+        else
+          pod=$2
         fi
 
-        pod=$2
         if [[ "$2" == "." ]]; then
            if ! [ -f $CONFIG/last_top ]; then
              error "You have never fetched any resource counts"
@@ -2080,6 +2116,46 @@ case "$1" in
         fi
         ;;
 
+      # Inspect docker image used by pod
+      "inspect")
+        if [ $# -ne 2 ]; then
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  inspect: Inspect pod image\n  inspect '.': Inspect image for last pod again"
+          fi
+        else
+          pod=$2
+        fi
+
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_inspect ]; then
+            error "You have never inspected image from any pods"
+          fi
+          pod=$(cat $CONFIG/last_inspect)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/imgout
+        runkctl get pod $pod -n $NAMESPACE -o json
+
+        if [ -s $CONFIG/imgout ]
+        then
+          image=$(cat $CONFIG/imgout | jq -r '.spec.containers | to_entries[].value.image')
+          docker pull $image > /dev/null
+          docker image inspect $image | jq .
+        else
+          error "No such pod $pod"
+        fi
+ 	rm $CONFIG/imgout
+
+        echo $pod > $CONFIG/last_inspect
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "
@@ -2107,7 +2183,7 @@ case "$1" in
         echo "                       If found, then variables [1-N] is available for pod related commands"
         echo "  policies             Show network policies"
         echo "  deployments          Show deployments (alias 'd')"
-        echo "  selectors            Show deployment selectors (alias 'ds')"
+        echo "  selectors            Show deployment selectors"
         echo "  services             Show services (alias 'sv')"
         echo "  sets                 Show statefulsets (alias ss)"
         echo "  jobs                 Show jobs (alias 'j')"
@@ -2147,6 +2223,7 @@ case "$1" in
         echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
+        echo "  inspect ...          Inspect docker image used by pod"
         echo "  url ...              Get service url from pod"
         echo "  top ...              Get resource usage from pod"
         echo ""
