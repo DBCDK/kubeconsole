@@ -82,11 +82,11 @@ if [ $# -eq 1 ] && [[ "$1" == "-kk" ]]; then
   exit
 fi
 
-if [ $# -eq 1 ] && [[ "$1" == "-c" ]]; then
+if [ $# -eq 1 ] && [[ "$1" == "-o" ]]; then
   echo "Go to '$KUBECONFIG' to get a config file,"
   echo "then create the directory '.kube' and add the configuration to the file 'config' there."
   echo
-  echo "You can also run \"kubeconsole -cc\" to interactively fetch a config file"
+  echo "You can also run \"kubeconsole -oo\" to interactively fetch a config file"
 
   echo
   which xclip > /dev/null
@@ -101,7 +101,7 @@ if [ $# -eq 1 ] && [[ "$1" == "-c" ]]; then
   exit
 fi
 
-if [ $# -eq 1 ] && [[ "$1" == "-cc" ]]; then
+if [ $# -eq 1 ] && [[ "$1" == "-oo" ]]; then
   which xclip > /dev/null
   if [ ! $? -eq 0 ];
   then
@@ -505,20 +505,21 @@ start_shell() {
   exit
 }
 
-# If no parameters is given, start the interactive k8s shell
-if [ $# -eq 0 ]; then
-  rm -f $CONFIG/pids
+# If no parameters is given, clear the screen and start the interactive k8s shell
+if [ $# -eq 0 ]
+then
   clear
   start_shell
 fi
 
 # If a startup command was given, execute it
-if [ $# -eq 2 ] && [[ "$1" == "-c" ]]; then
+if [ $# -eq 2 ] && [[ "$1" == "-c" ]]
+then
   NAMESPACE=$(cat $CONFIG/namespace)
   IS_START_COMMAND=1
   echo "1" > $CONFIG/no-header
   shift
-  clear
+#  clear
 fi
 
 DRYRUN=
@@ -2161,9 +2162,17 @@ case "$1" in
         echo "Available kubeconsole helper commands. "
         echo "Most commands will output usage help if run without parameters."
         echo ""
+        echo "Some commands that requires a pod or deployment can, as soon as the first listing"
+        echo "of the namespace has been issued, be run without a parameter to use the first pod"
+        echo "in the list, that is '1'"
+        echo ""
+        echo "Do note that command aliases do not work when run directly using the '-c' switch."
+        echo "One must use the full command name instead"
+        echo ""
         echo "Options:"
         echo "  kubeconsole -v       Show version and exit"
-        echo "  kubeconsole -c       Fetch new kubeconfig"
+        echo "  kubeconsole -o       Fetch new kubeconfig"
+        echo "  kubeconsole -oo      Fetch new kubeconfig interactively"
         echo "  kubeconsole -k       Check version of local kubectl vs latest"
         echo "  kubeconsole -kk      Fetch new kubectl"
         echo "  kubeconsole -?       Show this help"
@@ -2273,5 +2282,4 @@ esac
 # If a startup command was requested, start the interactive shell
 if [ ! -z $IS_START_COMMAND ]; then
   rm -f $CONFIG/no-header
-  start_shell
 fi
