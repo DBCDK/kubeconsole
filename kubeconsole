@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.3
+VERSION=1.15.4
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -276,6 +276,8 @@ echo "alias exec=\"kubeconsole run\"" >> $RC
 echo "alias e=\"kubeconsole run\"" >> $RC
 echo "alias ee=\"kubeconsole run 1\"" >> $RC
 echo "alias inspect=\"kubeconsole inspect\"" >> $RC
+echo "alias png=\"kubeconsole png\"" >> $RC
+echo "alias rdy=\"kubeconsole rdy\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -2157,6 +2159,76 @@ case "$1" in
         echo $pod > $CONFIG/last_inspect
         ;;
 
+      # Ping service
+      "png")
+        if [ $# -ne 2 ]; then
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  png: Ping service\n  png '.': ping last service again"
+         fi
+        else
+          pod=$2
+        fi
+
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_ping ]; then
+            error "You have never pinged any url from any pods"
+          fi
+          pod=$(cat $CONFIG/last_ping)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/urlout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        svc=$(cat $CONFIG/urlout | jq '.status.containerStatuses | .[].name' | sed 's/\"//g')
+	rm $CONFIG/urlout
+
+        url="$svc.$NAMESPACE.svc.cloud.dbc.dk"
+        ping -c 3 $url
+
+        echo $pod > $CONFIG/last_ping
+        ;;
+
+      # Call ready endpoint
+      "rdy")
+        if [ $# -ne 2 ]; then
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  rdy: Check health/ready endpoint\n  rdy '.': Check health/ready endpoint of last service again"
+         fi
+        else
+          pod=$2
+        fi
+
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_ready ]; then
+            error "You have never checked the health/ready endpoint from any pods"
+          fi
+          pod=$(cat $CONFIG/last_ready)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/urlout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        svc=$(cat $CONFIG/urlout | jq '.status.containerStatuses | .[].name' | sed 's/\"//g')
+	rm $CONFIG/urlout
+
+        url="http://$svc.$NAMESPACE.svc.cloud.dbc.dk/health/ready"
+        curl -s $url | jq .
+
+        echo $pod > $CONFIG/last_ready
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "
@@ -2235,6 +2307,9 @@ case "$1" in
         echo "  inspect ...          Inspect docker image used by pod"
         echo "  url ...              Get service url from pod"
         echo "  top ...              Get resource usage from pod"
+        echo ""
+        echo "  png ...              Ping the service url"
+        echo "  rdy ...              Try to GET the health/ready endpoint response"
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
         echo "  jlog ...             Get the java log pretty printed from a pod (alias 'jl')"
