@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.4
+VERSION=1.15.5
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -227,6 +227,14 @@ echo "alias ll=\"kubeconsole llog\"" >> $RC
 echo "alias jll=\"kubeconsole jllog\"" >> $RC
 echo "alias lf=\"kubeconsole logf\"" >> $RC
 echo "alias logp=\"kubeconsole logp\"" >> $RC
+echo "alias loga=\"kubeconsole loga\"" >> $RC
+echo "alias jloga=\"kubeconsole jloga\"" >> $RC
+echo "alias lloga=\"kubeconsole lloga\"" >> $RC
+echo "alias jlloga=\"kubeconsole jlloga\"" >> $RC
+echo "alias la=\"kubeconsole loga\"" >> $RC
+echo "alias jla=\"kubeconsole jloga\"" >> $RC
+echo "alias lla=\"kubeconsole lloga\"" >> $RC
+echo "alias jlla=\"kubeconsole jlloga\"" >> $RC
 echo "alias lp=\"kubeconsole logp\"" >> $RC
 echo "alias shell=\"kubeconsole shell\"" >> $RC
 echo "alias s=\"kubeconsole shell\"" >> $RC
@@ -1929,6 +1937,64 @@ case "$1" in
         echo $pod > $CONFIG/last_query
         ;;
 
+      # Get logs from all currently selected pods
+      "loga")
+        ;&
+      "jloga")
+        ;&
+      "lloga")
+        ;&
+      "jlloga")
+
+	# Check for a filter
+	if [ -z "$FILTER" ]; then
+	  error "No filter set, log scope is too big"
+	fi
+
+        # Get since time
+        since=$(cat $CONFIG/since)
+
+        # Update the list of pods
+	kubeconsole pods > /dev/null
+
+	echo "1" > $CONFIG/no-header
+	while read pid; do
+	  pod=$(echo $pid | cut -d '=' -f 2)
+          if [ $1 == "lloga" ] || [ $1 == "jlloga" ]
+          then
+            runkctl logs $pod -n $NAMESPACE > $CONFIG/tmp.loga
+          else
+            runkctl logs $pod --since=$since -n $NAMESPACE > $CONFIG/tmp.loga
+          fi
+	done < "$CONFIG/pids"
+
+        grep -q -E '{\"timestamp\"' $CONFIG/tmp.loga
+        if [ $? -eq 0 ]
+        then
+          if [ $1 == "jloga" ]
+          then
+            cat $CONFIG/tmp.loga | grep -E '{\"timestamp\"' | jq . | jq -n '[inputs] | sort_by(.timestamp)' | jq -C . > $CONFIG/tmp.loga.out
+          elif [ $1 == "jlloga" ]
+          then
+            cat $CONFIG/tmp.loga | grep -E '{\"timestamp\"' | jq . | jq -n '[inputs] | sort_by(.timestamp)' > $CONFIG/tmp.loga.out
+          else
+            cat $CONFIG/tmp.loga | grep -E '{\"timestamp\"' | jq . | jq -n '[inputs] | sort_by(.timestamp)' | jq -c | sed 's/\[{//' | sed 's/}\]//' | sed 's/},{/\n/g' > $CONFIG/tmp.loga.out
+          fi
+        else
+          cat $CONFIG/tmp.loga > $CONFIG/tmp.loga.out
+        fi
+
+        if [ $1 == "lloga" ] || [ $1 == "jlloga" ]
+        then
+          less $CONFIG/tmp.loga.out
+        else
+          cat $CONFIG/tmp.loga.out
+        fi
+
+        rm -f $CONFIG/tmp.loga
+        rm -f $CONFIG/tmp.loga.out
+        ;;
+
       # Copy a file to/from a pod
       "cpy")
 
@@ -2319,6 +2385,10 @@ case "$1" in
         echo "  llog ...             Get the complete log from a pod and show in less (alias 'll')"
         echo "  jllog ...            Get the complete java log pretty printed from a pod and show in less (alias 'jll')"
         echo "  logp ...             Get the previous log from a pod (alias 'lp')"
+        echo "  loga                 Get the logs from all pods selected by the current filter with current 'since' (alias 'la')"
+        echo "  jloga                Get the logs from all pods selected by the current filter with current 'since' as json (alias ('jla')"
+        echo "  lloga                Get the complete logs from all pods selected by the current filter and show in less (alias 'lla')"
+        echo "  jlloga               Get the complete logs from all pods selected by the current filter as json and show in less (alias 'jlla')"
         echo "  query ...            Search the complete logs from all pods selected by the current filter"
         echo "  since [...]          Set the log interval (parameter --since). No argument sets default value '1h'"
         echo ""
