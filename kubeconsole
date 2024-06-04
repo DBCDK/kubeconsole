@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.7
+VERSION=1.15.8
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -214,13 +214,21 @@ echo "alias ds=\"kubeconsole delete_service\"" >> $RC
 echo "alias namespaces=\"kubeconsole namespaces\"" >> $RC
 echo "alias log=\"kubeconsole log\"" >> $RC
 echo "alias jlog=\"kubeconsole jlog\"" >> $RC
+echo "alias error=\"kubeconsole error\"" >> $RC
+echo "alias warning=\"kubeconsole warning\"" >> $RC
 echo "alias l=\"kubeconsole log\"" >> $RC
 echo "alias jl=\"kubeconsole jlog\"" >> $RC
+echo "alias er=\"kubeconsole error\"" >> $RC
+echo "alias wr=\"kubeconsole warning\"" >> $RC
 echo "alias logf=\"kubeconsole logf\"" >> $RC
 echo "alias logc=\"kubeconsole logc\"" >> $RC
 echo "alias jlogc=\"kubeconsole jlogc\"" >> $RC
+echo "alias errorc=\"kubeconsole errorc\"" >> $RC
+echo "alias warningc=\"kubeconsole warningc\"" >> $RC
 echo "alias lc=\"kubeconsole logc\"" >> $RC
 echo "alias jlc=\"kubeconsole jlogc\"" >> $RC
+echo "alias erc=\"kubeconsole errorc\"" >> $RC
+echo "alias wrc=\"kubeconsole warningc\"" >> $RC
 echo "alias llog=\"kubeconsole llog\"" >> $RC
 echo "alias jllog=\"kubeconsole jllog\"" >> $RC
 echo "alias ll=\"kubeconsole llog\"" >> $RC
@@ -1511,9 +1519,13 @@ case "$1" in
       "jlogc")
         ;&
       "logc")
+        ;&
+      "errorc")
+        ;&
+      "warningc")
 
         if [ $# -ne 2 ]; then
-          usage "  logc 'pod id' [-f]: get complete log from this pod\n  logc '.' [-f]: get complete log from same pod again"
+          usage "  logc 'pod id' [-f]: get complete log, errors or warnings from this pod\n  logc '.' [-f]: get complete log, errors or warnings from same pod again"
         fi
 
         pod=$2
@@ -1536,6 +1548,12 @@ case "$1" in
         if [ "$1" = "jlogc" ]
         then
           cat $CONFIG/last | grep timestamp | jq -C . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g'
+        elif [ "$1" = "errorc" ]
+        then
+          cat $CONFIG/last | grep '"level":"ERROR"'
+        elif [ "$1" = "warningc" ]
+        then
+          cat $CONFIG/last | grep '"level":"WARNING"'
         else
           cat $CONFIG/last
         fi
@@ -1582,9 +1600,13 @@ case "$1" in
       "jlog")
         ;&
       "log")
+        ;&
+      "warning")
+        ;&
+      "error")
 
         if [ $# -ne 2 ]; then
-          usage "  log 'pod id' [-f]: get log from this pod\n  log '.' [-f]: get log from same pod again"
+          usage "  log|jlog|error|warning 'pod id' [-f]: get log, errors or warnings from this pod\n  log|jlog|error|warning '.' [-f]: get log, errors or warnings from same pod again"
         fi
 
         pod=$2
@@ -1607,6 +1629,12 @@ case "$1" in
         if [ "$1" = "jlog" ]
         then
           cat $CONFIG/last | grep timestamp | jq -C . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g'
+        elif [ "$1" = "error" ]
+        then
+          cat $CONFIG/last | grep '"level":"ERROR"'
+        elif [ "$1" = "warning" ]
+        then
+          cat $CONFIG/last | grep '"level":"WARNING"'
         else
           cat $CONFIG/last
         fi
@@ -2469,9 +2497,13 @@ case "$1" in
         echo ""
         echo "  log ...              Get the log from a pod (alias 'l')"
         echo "  jlog ...             Get the java log pretty printed from a pod (alias 'jl')"
+        echo "  error ...            Get errors from the log from a pod (alias 'er')"
+        echo "  warning ...          Get warnings from the log from a pod (alias 'wr')"
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
         echo "  logc ...             Get the complete log from a pod (alias 'lc')"
         echo "  jlogc ...            Get the complete java log pretty printed from a pod (alias 'jlc')"
+        echo "  errorc ...           Get errors from the complete log from a pod (alias 'erc')"
+        echo "  warningc ...         Get warnings from the complete log from a pod (alias 'wrc')"
         echo "  llog ...             Get the complete log from a pod and show in less (alias 'll')"
         echo "  jllog ...            Get the complete java log pretty printed from a pod and show in less (alias 'jll')"
         echo "  logp ...             Get the previous log from a pod (alias 'lp')"
