@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.8
+VERSION=1.15.9
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -271,6 +271,7 @@ echo "alias clip=\"cat $CONFIG/last | xclip\"" >> $RC
 echo "alias cpy=\"kubeconsole cpy\"" >> $RC
 echo "alias containers=\"kubeconsole show_containers\"" >> $RC
 echo "alias label=\"kubeconsole label\"" >> $RC
+echo "alias team=\"kubeconsole team\"" >> $RC
 echo "alias volumes=\"kubeconsole volumes\"" >> $RC
 echo "alias v=\"kubeconsole volumes\"" >> $RC
 echo "alias getv=\"kubeconsole get volume\"" >> $RC
@@ -1922,6 +1923,21 @@ case "$1" in
 
         ;;
 
+      "team")
+
+        if [ $# -eq 1 ]; then
+          truncate -s 0 $CONFIG/label
+          truncate -s 0 $CONFIG/labelname
+        else
+          echo "app.dbc.dk/team=$2" > $CONFIG/label
+          echo "(app.dbc.dk/team=$2)" > $CONFIG/labelname
+        fi
+
+        # Show pods
+        kubeconsole pods
+
+        ;;
+
       "since")
 
         if [ $# -eq 1 ]; then
@@ -2458,6 +2474,7 @@ case "$1" in
         echo ""
         echo "  filter [...]         (also) Filter the 'pods|completed|failed|deployments' list by a string. No argument clears the filter"
         echo "  label [...[=...]]    (also) Filter the 'pods|completed|failed|deployments' list by a label. No argument clears the label"
+        echo "  team [...]           Shorthand for 'label app.dbc.dk/team=...'"
         echo ""
         echo "  apply ...            Apply deployment from a yaml file"
         echo "  delete ...           Delete deployment"
