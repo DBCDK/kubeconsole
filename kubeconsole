@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.9
+VERSION=1.15.10
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -258,6 +258,7 @@ echo "alias gets=\"kubeconsole get service\"" >> $RC
 echo "alias shows=\"kubeconsole show service\"" >> $RC
 echo "alias env=\"kubeconsole env\"" >> $RC
 echo "alias img=\"kubeconsole img\"" >> $RC
+echo "alias who=\"kubeconsole who\"" >> $RC
 echo "alias url=\"kubeconsole url\"" >> $RC
 echo "alias container=\"kubeconsole container\"" >> $RC
 echo "alias cnt=\"kubeconsole container\"" >> $RC
@@ -1226,6 +1227,39 @@ case "$1" in
 	rm $CONFIG/imgout
 
         echo $pod > $CONFIG/last_img
+        ;;
+
+      # Show who owns a pod
+      "who")
+        if [ $# -ne 2 ]; then
+          if has_pods
+          then
+            pod=1
+          else
+            usage "  who: Show pod owner\n  show '.': Show owner for last pod again"
+          fi
+        else
+          pod=$2
+        fi
+
+        if [[ "$target" == "." ]]; then
+          if ! [ -f $CONFIG/last_who ]; then
+            error "You have never shown owner for any pods"
+          fi
+          pod=$(cat $CONFIG/last_who)
+        fi
+
+        # Attempt expansion
+        expand_arg $pod
+        pod=$ARG
+
+	REDIRECT=$CONFIG/whoout
+        runkctl get pod $pod -n $NAMESPACE -o json
+        owner=$(cat $CONFIG/whoout | jq '.metadata.labels["app.dbc.dk/team"]' | tr -d '"')
+        echo $owner
+	rm $CONFIG/whoout
+
+        echo $pod > $CONFIG/last_who
         ;;
 
       # Show service url for a pod
@@ -2505,6 +2539,7 @@ case "$1" in
         echo ""
         echo "  env ...              Get environment variables from pod"
         echo "  img ...              Get image name from pod"
+        echo "  who ...              Show which team 'owns' this pod (the team label)"
         echo "  inspect ...          Inspect docker image used by pod"
         echo "  url ...              Get service url from pod"
         echo "  top ...              Get resource usage from pod"
