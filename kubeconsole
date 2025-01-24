@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.15.10
+VERSION=1.16.0
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -300,6 +300,7 @@ echo "alias resources=\"kubeconsole resources\"" >> $RC
 echo "alias rcs=\"kubeconsole resources\"" >> $RC
 echo "alias describepods=\"kubeconsole describepods\"" >> $RC
 echo "alias dp=\"kubeconsole describepods\"" >> $RC
+echo "alias where=\"kubeconsole where\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -395,9 +396,9 @@ runkctl () {
       echo -e "\033[0;90m$cmd\033[0;00m"
     fi
     if [ "NONS" == "" ]; then
-      $KCTL $@ -n $NAMESPACE > "${REDIRECT}"
+      $KCTL $@ -n $NAMESPACE > "${REDIRECT}" 2>&1
     else
-      $KCTL $@ > "${REDIRECT}"
+      $KCTL $@ > "${REDIRECT}" 2>&1
     fi
   elif [ "$APPEND" != "" ]; then
     if [ ! -f "$CONFIG/no-header" ]; then
@@ -2384,8 +2385,6 @@ case "$1" in
           pattern=
         fi
 
-        #touch $CONFIG/no-header;
-
         if [ -z $LABEL ]; then
           REDIRECT=$CONFIG/tmp.1; runkctl top pods -n $NAMESPACE
         else
@@ -2449,6 +2448,36 @@ case "$1" in
         rm $CONFIG/tmp
         ;;
 
+      # Find pods in namespaces
+      "where")
+        if [ $# -ne 2 ]; then
+          usage "  where ...: Find pods matching this name in all namespaces, excluding user-* and dit-*"
+        fi
+
+        touch $CONFIG/no-header
+        NONS=0
+        REDIRECT=$CONFIG/namespaces.tmp.1; runkctl get namespaces
+        cat $CONFIG/namespaces.tmp.1 | cut -d ' ' -f 1 | grep -E -v "^(user-|dit|dc-|platform|os-|pu-|shelob|monitoring|logs|kube-|jenkins|healthcheck|labs-prod).*$" | tail -n +2 > $CONFIG/namespaces.tmp.2
+        while read -r namespace
+        do
+          touch $CONFIG/no-header
+          NONS=1
+          REDIRECT=$CONFIG/pods.tmp.1; runkctl get pods -n $namespace
+          cat $CONFIG/pods.tmp.1 | cut -d ' ' -f 1 > $CONFIG/pods.tmp.2
+          grep $2 $CONFIG/pods.tmp.2 > $CONFIG/pods.tmp.3
+          if [ $? -eq 0 ]
+          then
+            echo "========[ $namespace ]========"
+            cat $CONFIG/pods.tmp.3
+          fi
+        done < $CONFIG/namespaces.tmp.2
+
+        rm $CONFIG/namespaces.tmp.1
+        rm $CONFIG/namespaces.tmp.2
+        rm $CONFIG/pods.tmp.1
+        rm $CONFIG/pods.tmp.2
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "
@@ -2489,6 +2518,7 @@ case "$1" in
         echo "  namespaces           List abbreviated namespaces"
         echo ""
         echo "  pods                 Show pods in namespace (alias 'p')"
+        echo "  where ...            Show which namespaces contains a pod that matches this name"
         echo "  containers           Show containers in namespace"
         echo "  completed            Show pods with status 'Completed' (alias 'c')"
         echo "  failed               Show pods with restarts (alias 'f')"
