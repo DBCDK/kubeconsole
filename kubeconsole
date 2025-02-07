@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.16.0
+VERSION=1.16.1
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -46,6 +46,9 @@ then
 else
   curl -o $CONFIG/versioncheck "$GITURL" &> /dev/null
 fi
+
+# Clean any existing no-header files
+rm -f $CONFIG/no-header
 
 # Check for configuration commands
 if [ $# -eq 1 ] && [[ "$1" == "-k" ]];
@@ -301,6 +304,8 @@ echo "alias rcs=\"kubeconsole resources\"" >> $RC
 echo "alias describepods=\"kubeconsole describepods\"" >> $RC
 echo "alias dp=\"kubeconsole describepods\"" >> $RC
 echo "alias where=\"kubeconsole where\"" >> $RC
+echo "alias labels=\"kubeconsole labels\"" >> $RC
+echo "alias which=\"kubeconsole which\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -2460,7 +2465,6 @@ case "$1" in
         cat $CONFIG/namespaces.tmp.1 | cut -d ' ' -f 1 | grep -E -v "^(user-|dit|dc-|platform|os-|pu-|shelob|monitoring|logs|kube-|jenkins|healthcheck|labs-prod).*$" | tail -n +2 > $CONFIG/namespaces.tmp.2
         while read -r namespace
         do
-          touch $CONFIG/no-header
           NONS=1
           REDIRECT=$CONFIG/pods.tmp.1; runkctl get pods -n $namespace
           cat $CONFIG/pods.tmp.1 | cut -d ' ' -f 1 > $CONFIG/pods.tmp.2
@@ -2469,6 +2473,86 @@ case "$1" in
           then
             echo "========[ $namespace ]========"
             cat $CONFIG/pods.tmp.3
+          fi
+        done < $CONFIG/namespaces.tmp.2
+
+        rm $CONFIG/namespaces.tmp.1
+        rm $CONFIG/namespaces.tmp.2
+        rm $CONFIG/pods.tmp.1
+        rm $CONFIG/pods.tmp.2
+        rm $CONFIG/pods.tmp.2
+        ;;
+
+      # List labels
+      "labels")
+        if [ $# -lt 1 ]; then
+          usage "  labels: List labels for deployments, filtered by active filter or label"
+        fi
+
+        if [ "$FILTER" != "" ]; then
+          pattern=$FILTER
+        else
+          pattern=
+        fi
+
+        touch $CONFIG/no-header;
+
+        if [ -z $LABEL ]; then
+          REDIRECT=$CONFIG/tmp.1; runkctl get deployments -n $NAMESPACE
+          REDIRECT=$CONFIG/tmp.2; runkctl get statefulsets -n $NAMESPACE
+        else
+          REDIRECT=$CONFIG/tmp.1; runkctl get deployments -l $LABEL -n $NAMESPACE
+          REDIRECT=$CONFIG/tmp.2; runkctl get statefulsets -l $LABEL -n $NAMESPACE
+        fi
+
+        cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/  */ /g' | cut -d ' ' -f 1 > $CONFIG/tmp
+        while read -r deployment
+        do
+          REDIRECT=$CONFIG/tmp.3; runkctl describe deployment $deployment -n $NAMESPACE
+	  team=$(cat $CONFIG/tmp.3 | grep app.dbc.dk/team= | tr -d ' ' | head -n 1 | cut -d '=' -f 2)
+          printf "%-40s   %-12s   %-16s\n" $deployment "deployment" $team >> $CONFIG/tmp.out
+        done < $CONFIG/tmp
+
+        cat $CONFIG/tmp.2 | grep -F "$pattern" | sed 's/  */ /g' | cut -d ' ' -f 1 > $CONFIG/tmp
+        while read -r statefulset
+        do
+          REDIRECT=$CONFIG/tmp.3; runkctl describe statefulset $statefulset -n $NAMESPACE
+	  team=$(cat $CONFIG/tmp.3 | grep app.dbc.dk/team= | tr -d ' ' | head -n 1 | cut -d '=' -f 2)
+          printf "%-40s   %-12s   %-16s\n" $statefulset "statefulset" $team >> $CONFIG/tmp.out
+        done < $CONFIG/tmp
+
+        printf "%-40s   %-12s   %-16s\n" "Deployment/Set" "Team"
+        printf "%-40s---%-12s---%-16s\n" "----------------------------------------" "------------" "----------------"
+
+        cat $CONFIG/tmp.out | sort
+
+        rm $CONFIG/tmp
+        rm $CONFIG/tmp.1
+        rm $CONFIG/tmp.2
+        rm $CONFIG/tmp.3
+        rm $CONFIG/tmp.out
+        ;;
+
+      # Find pods with team labels in namespaces
+      "which")
+        if [ $# -ne 2 ]; then
+          usage "  which ...: Find pods having this team label in all namespaces, excluding user-* and dit-*"
+        fi
+
+        touch $CONFIG/no-header
+        NONS=0
+        REDIRECT=$CONFIG/namespaces.tmp.1; runkctl get namespaces
+        cat $CONFIG/namespaces.tmp.1 | cut -d ' ' -f 1 | grep -E -v "^(user-|dit|dc-|platform|os-|pu-|shelob|monitoring|logs|kube-|jenkins|healthcheck|labs-prod).*$" | tail -n +2 > $CONFIG/namespaces.tmp.2
+        while read -r namespace
+        do
+          NONS=1
+          REDIRECT=$CONFIG/pods.tmp.1; runkctl get pods -l app.dbc.dk/team=$2 -n $namespace
+          cat $CONFIG/pods.tmp.1 | cut -d ' ' -f 1 > $CONFIG/pods.tmp.2
+          pods=$(wc -l $CONFIG/pods.tmp.2 | cut -d ' ' -f 1)
+          if [ $pods -gt 1 ]
+          then
+            echo "========[ $namespace ]========"
+            cat $CONFIG/pods.tmp.2 | tail -n +2
           fi
         done < $CONFIG/namespaces.tmp.2
 
@@ -2519,6 +2603,7 @@ case "$1" in
         echo ""
         echo "  pods                 Show pods in namespace (alias 'p')"
         echo "  where ...            Show which namespaces contains a pod that matches this name"
+        echo "  which ...            Show which namespaces contains a pod that matches this label"
         echo "  containers           Show containers in namespace"
         echo "  completed            Show pods with status 'Completed' (alias 'c')"
         echo "  failed               Show pods with restarts (alias 'f')"
@@ -2533,7 +2618,7 @@ case "$1" in
         echo "  jobs                 Show jobs (alias 'j')"
         echo "  cronjobs             Show cronjobs (alias 'cr')"
         echo "  resources            Show selector and aggregated resources for (filtered) deployments (alias 'rcs')"
-        echo ""
+        echo "  labels               Show label for all (filtered) deployments"
         echo "  volumes              Show persistent volume claims (alias 'v')"
         echo ""
         echo "  filter [...]         (also) Filter the 'pods|completed|failed|deployments' list by a string. No argument clears the filter"
