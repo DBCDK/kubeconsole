@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.16.1
+VERSION=1.16.2
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -306,6 +306,7 @@ echo "alias dp=\"kubeconsole describepods\"" >> $RC
 echo "alias where=\"kubeconsole where\"" >> $RC
 echo "alias labels=\"kubeconsole labels\"" >> $RC
 echo "alias which=\"kubeconsole which\"" >> $RC
+echo "alias qos=\"kubeconsole qos\"" >> $RC
 
 # Setup pod name completion
 set_autocomplete () {
@@ -2562,6 +2563,42 @@ case "$1" in
         rm $CONFIG/pods.tmp.2
         ;;
 
+      # List QoS for pods
+      "qos")
+        if [ $# -lt 1 ]; then
+          usage "  qos: List Quality of service for pods, filtered by active filter or label"
+        fi
+
+        if [ "$FILTER" != "" ]; then
+          pattern=$FILTER
+        else
+          pattern=
+        fi
+
+        touch $CONFIG/no-header;
+
+        if [ -z $LABEL ]; then
+          REDIRECT=$CONFIG/tmp.1; runkctl get pods -n $NAMESPACE
+        else
+          REDIRECT=$CONFIG/tmp.1; runkctl get pods -l $LABEL -n $NAMESPACE
+        fi
+
+        cat $CONFIG/tmp.1 | grep -F "$pattern" | sed 's/  */ /g' | cut -d ' ' -f 1 > $CONFIG/tmp
+
+        printf "%-60s   %-24s\n" "Pod" "QoS"
+        printf "%-60s---%-24s\n" "------------------------------------------------------------" "------------------------"
+
+        while read -r pod
+        do
+          REDIRECT=$CONFIG/tmp.2; runkctl describe pods $pod -n $NAMESPACE
+	  qos=$(cat $CONFIG/tmp.2 | grep QoS | rev | cut -d ' ' -f 1 | rev)
+          printf "%-60s   %-24s\n" $pod $qos
+        done < $CONFIG/tmp
+
+        rm $CONFIG/tmp.1
+        rm $CONFIG/tmp.2
+        ;;
+
       "help")
 
         echo "Available kubeconsole helper commands. "
@@ -2658,6 +2695,7 @@ case "$1" in
         echo "  inspect ...          Inspect docker image used by pod"
         echo "  url ...              Get service url from pod"
         echo "  top ...              Get resource usage from pod"
+        echo "  qos ...              Show Quality of Service for pod"
         echo ""
         echo "  png ...              Ping the service url"
         echo "  rdy ...              Try to GET the health/ready endpoint response"
