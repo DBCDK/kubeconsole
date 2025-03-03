@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Version
-VERSION=1.16.2
+VERSION=1.16.3
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -442,6 +442,30 @@ runkctl () {
   REDIRECT=
   APPEND=
   NOLOG=
+}
+
+KIND=
+getkind() {
+  touch $CONFIG/no-header
+  KIND="unknown"
+
+  REDIRECT=$CONFIG/getkind.tmp; runkctl get pod $1 -n $NAMESPACE
+  grep -q "Error from server" $CONFIG/getkind.tmp
+  if [ $? -eq 1 ]
+  then
+    rm $CONFIG/no-header
+    KIND="Pod"
+    return
+  fi
+
+  REDIRECT=$CONFIG/getkind.tmp; runkctl get job $1 -n $NAMESPACE
+  grep -q "Error from server" $CONFIG/getkind.tmp
+  if [ $? -eq 1 ]
+  then
+    rm $CONFIG/no-header
+    KIND="Job"
+    return
+  fi
 }
 
 # Print usage message and exit
@@ -1666,8 +1690,20 @@ case "$1" in
         # Get since time
         since=$(cat $CONFIG/since)
 
+        # Set type of resource
+        getkind $pod
+
         NOCAT=1
-        runkctl logs $pod --since=$since -n $NAMESPACE
+        if [ "$KIND" = "Pod" ]
+        then
+          runkctl logs $pod --since=$since -n $NAMESPACE
+        elif [ "$KIND" = "Job" ]
+        then
+          runkctl logs jobs/$pod -n $NAMESPACE
+        else
+          error "Unknown type of resource. Unable to get a log"
+        fi
+
         if [ "$1" = "jlog" ]
         then
           cat $CONFIG/last | grep timestamp | jq -C . | sed 's/\\n/\n/g' | sed 's/\\t/\t/g'
@@ -2652,8 +2688,8 @@ case "$1" in
         echo "  selectors            Show deployment selectors"
         echo "  services             Show services (alias 'sv')"
         echo "  sets                 Show statefulsets (alias ss)"
-        echo "  jobs                 Show jobs (alias 'j')"
-        echo "  cronjobs             Show cronjobs (alias 'cr')"
+        echo "  jobs                 Show running and completed jobs (alias 'j')"
+        echo "  cronjobs             Show cronjobs (alias 'cj')"
         echo "  resources            Show selector and aggregated resources for (filtered) deployments (alias 'rcs')"
         echo "  labels               Show label for all (filtered) deployments"
         echo "  volumes              Show persistent volume claims (alias 'v')"
@@ -2673,7 +2709,7 @@ case "$1" in
         echo "  yml                  Set output format for the get command to YAML"
         echo ""
         echo "  show ... ...         Show (describe) resource (variables expansion applies)"
-        echo "       pod ...         Describe a pod"
+        echo "       pod ...         Describe a pod. (default if no resource type is given)"
         echo "       deployment ...  Describe a deployment"
         echo "       policy ...      Describe a network policy"
         echo "       service ...     Describe a service"
@@ -2681,7 +2717,7 @@ case "$1" in
         echo "       cronjob ...     Describe a cronjob"
         echo ""
         echo "  get ... ...          Get resource specs (variable expansion applies)"
-        echo "       pod ...         Get pod spec."
+        echo "       pod ...         Get pod spec. (default if no resource type is given)"
         echo "       deployment ...  Get deployment spec."
         echo "       policy ...      Get network spec."
         echo "       service ...     Get service spec."
@@ -2700,10 +2736,10 @@ case "$1" in
         echo "  png ...              Ping the service url"
         echo "  rdy ...              Try to GET the health/ready endpoint response"
         echo ""
-        echo "  log ...              Get the log from a pod (alias 'l')"
-        echo "  jlog ...             Get the java log pretty printed from a pod (alias 'jl')"
-        echo "  error ...            Get errors from the log from a pod (alias 'er')"
-        echo "  warning ...          Get warnings from the log from a pod (alias 'wr')"
+        echo "  log ...              Get the log from a pod or job (alias 'l')"
+        echo "  jlog ...             Get the java log pretty printed from a pod or job (alias 'jl')"
+        echo "  error ...            Get errors from the log from a pod or job (alias 'er')"
+        echo "  warning ...          Get warnings from the log from a pod or job (alias 'wr')"
         echo "  logf ...             Stream the log from a pod (alias 'lf')"
         echo "  logc ...             Get the complete log from a pod (alias 'lc')"
         echo "  jlogc ...            Get the complete java log pretty printed from a pod (alias 'jlc')"
