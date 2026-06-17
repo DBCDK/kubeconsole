@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Version
-VERSION=1.17.0
+VERSION=1.17.1
 
 # Kubeconfig url
 KUBECONFIG="http://kube-login.default.svc.cloud.dbc.dk:5555/login?intent=kubeconfig"
@@ -199,6 +199,7 @@ echo "alias completed=\"kubeconsole completed\"" >> $RC
 echo "alias c=\"kubeconsole completed\"" >> $RC
 echo "alias deployments=\"kubeconsole deployments\"" >> $RC
 echo "alias sets=\"kubeconsole sets\"" >> $RC
+echo "alias st=\"kubeconsole sets\"" >> $RC
 echo "alias jobs=\"kubeconsole jobs\"" >> $RC
 echo "alias cronjobs=\"kubeconsole cronjobs\"" >> $RC
 echo "alias cj=\"kubeconsole cronjobs\"" >> $RC
@@ -2687,7 +2688,7 @@ case "$1" in
         echo "  deployments          Show deployments (alias 'd')"
         echo "  selectors            Show deployment selectors"
         echo "  services             Show services (alias 'sv')"
-        echo "  sets                 Show statefulsets (alias ss)"
+        echo "  sets                 Show statefulsets (alias st)"
         echo "  jobs                 Show running and completed jobs (alias 'j')"
         echo "  cronjobs             Show cronjobs (alias 'cj')"
         echo "  resources            Show selector and aggregated resources for (filtered) deployments (alias 'rcs')"
